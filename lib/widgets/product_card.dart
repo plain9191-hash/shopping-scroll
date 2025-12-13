@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/product.dart';
+import 'star_rating.dart';
 
 class ProductCard extends StatelessWidget {
   final Product product;
@@ -31,26 +33,11 @@ class ProductCard extends StatelessWidget {
   }
 
   String _formatPrice(int price) {
-    if (price >= 10000) {
-      final man = price ~/ 10000;
-      final remainder = price % 10000;
-      if (remainder == 0) {
-        return '$man만원';
-      } else {
-        return '$man만 ${(remainder / 1000).toStringAsFixed(0)}천원';
-      }
-    } else if (price >= 1000) {
-      return '${(price / 1000).toStringAsFixed(0)}천원';
-    } else {
-      return '$price원';
-    }
+    return '${NumberFormat('#,###').format(price)}원';
   }
 
   @override
   Widget build(BuildContext context) {
-    final isPriceDown = product.isPriceDown;
-    final priceChangePercent = product.priceChangePercent.abs();
-
     return Card(
       margin: const EdgeInsets.all(8),
       elevation: 2,
@@ -91,42 +78,6 @@ class ProductCard extends StatelessWidget {
                       height: 180,
                       color: Colors.grey[200],
                       child: const Icon(Icons.image_not_supported),
-                    ),
-                  ),
-                ),
-                // 가격 변동 배지
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isPriceDown ? Colors.red : Colors.blue,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPriceDown
-                              ? Icons.arrow_downward
-                              : Icons.arrow_upward,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          '${priceChangePercent.toStringAsFixed(0)}%',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ),
@@ -210,30 +161,32 @@ class ProductCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // 별점 및 리뷰
+                  if (product.reviewCount > 0)
+                    Row(
+                      children: [
+                        StarRating(rating: product.averageRating, size: 16),
+                        const SizedBox(width: 6),
+                        Text(
+                          '(${NumberFormat('#,###').format(product.reviewCount)})',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  const SizedBox(height: 8),
                   // 가격 정보
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _formatPrice(product.currentPrice),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isPriceDown
-                              ? Colors.red[700]
-                              : Colors.blue[700],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '평균 ${_formatPrice(product.averagePrice)}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    _formatPrice(product.currentPrice),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: product.isPriceDown
+                          ? Colors.red[700]
+                          : Colors.blue[700],
+                    ),
                   ),
                 ],
               ),

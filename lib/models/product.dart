@@ -9,6 +9,8 @@ class Product {
   final String? category;
   final bool isRocketDelivery;
   final bool isLowestPrice;
+  final int reviewCount;
+  final double averageRating;
   final String? productUrl;
 
   Product({
@@ -22,6 +24,8 @@ class Product {
     this.category,
     this.isRocketDelivery = false,
     this.isLowestPrice = false,
+    this.reviewCount = 0,
+    this.averageRating = 0.0,
     this.productUrl,
   });
 
@@ -30,6 +34,3 @@ class Product {
 
   int get priceDifference => currentPrice - averagePrice;
 }
-
-
-

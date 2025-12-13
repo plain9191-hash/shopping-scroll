@@ -17,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Product> _products = [];
   bool _isLoading = false;
   bool _hasMore = true;
-  int _currentPage = 0;
+  int _currentOffset = 0;
 
   @override
   void initState() {
@@ -39,21 +39,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       // 쿠팡 상품 10개
-      final coupangProducts = await _productService.getCoupangProducts(
-        page: 0,
+      final newProducts = await _productService.getCoupangProducts(
+        offset: 0,
         limit: 10,
       );
 
-      // 네이버 쇼핑 상품 10개
-      final naverProducts = await _productService.getNaverShoppingProducts(
-        page: 0,
-        limit: 10,
-      );
+      // 네이버 상품은 초기 로드 시 제외하거나, 별도 로직으로 추가할 수 있습니다.
+      // 여기서는 쿠팡 베스트100 순위 로딩에 집중합니다.
+      // final naverProducts = await _productService.getNaverShoppingProducts(
+      //   page: 0,
+      //   limit: 10,
+      // );
 
+      final uniqueProducts = _removeDuplicates(newProducts);
+
+      // 가격 변동률 기준으로 정렬
+      uniqueProducts.sort(
+        (a, b) => a.priceChangePercent.compareTo(b.priceChangePercent),
+      );
       setState(() {
-        _products = [...coupangProducts, ...naverProducts];
+        _products = uniqueProducts;
         _isLoading = false;
-        _currentPage = 1;
+        _currentOffset = 10; // 다음 로드할 시작 순위
       });
     } catch (e) {
       setState(() {
@@ -75,17 +82,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final newProducts = await _productService.getAllProducts(
-        page: _currentPage,
-        limit: 20,
+      // 쿠팡 상품 10개
+      final newProducts = await _productService.getCoupangProducts(
+        offset: _currentOffset,
+        limit: 10,
+      );
+
+      // 새로 불러온 상품 중 기존 목록에 없는 것만 추가
+      final uniqueNewProducts = _removeDuplicates([
+        ..._products,
+        ...newProducts,
+      ]).sublist(_products.length);
+
+      // 가격 변동률 기준으로 정렬
+      uniqueNewProducts.sort(
+        (a, b) => a.priceChangePercent.compareTo(b.priceChangePercent),
       );
 
       setState(() {
-        if (newProducts.isEmpty) {
+        if (uniqueNewProducts.isEmpty) {
           _hasMore = false;
         } else {
-          _products.addAll(newProducts);
-          _currentPage++;
+          _products.addAll(uniqueNewProducts);
+          _currentOffset += 10;
         }
         _isLoading = false;
       });
@@ -108,6 +127,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  List<Product> _removeDuplicates(List<Product> products) {
+    final uniqueIds = <String>{}; // 이미 추가된 상품 ID를 추적
+    final uniqueProducts = <Product>[];
+    for (final product in products) {
+      // add 메서드는 Set에 요소가 성공적으로 추가되면 true를 반환
+      if (uniqueIds.add(product.id)) {
+        uniqueProducts.add(product);
+      }
+    }
+    return uniqueProducts;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -128,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onRefresh: () async {
                 setState(() {
                   _products = [];
-                  _currentPage = 0;
+                  _currentOffset = 0;
                   _hasMore = true;
                 });
                 await _loadInitialProducts();
@@ -210,5 +241,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
-
