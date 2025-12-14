@@ -934,6 +934,8 @@ class ProductService {
             print(
               '  💰 가격: ${price.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]},')}원',
             );
+            print('  ⭐ 리뷰 수: 없음 (상세 페이지에서 가져올 예정)');
+            print('  ⭐ 별점: 없음 (상세 페이지에서 가져올 예정)');
             print('  ✅ [쿠팡] 상품 추가 완료!');
             print('  ──────────────────────────────────────');
             // 상세 정보 가져오기 Future 추가
@@ -999,32 +1001,55 @@ class ProductService {
       if (response.statusCode == 200) {
         final document = html_parser.parse(response.body);
 
-        // 리뷰 수
-        // 리뷰 수를 찾기 위한 선택자 확장
-        final ratingCountElement = document.querySelector(
-          '.prod-rating-count, .sdp-review__average__total-star__info-count, .count',
-        );
-        final ratingCountText = ratingCountElement?.text.trim() ?? '0';
-        // 괄호와 같은 불필요한 문자 제거
-        final reviewCount = _parsePrice(ratingCountText);
+        int reviewCount = 0;
+        double rating = 0.0;
 
-        // 별점
-        // 별점을 찾기 위한 선택자 확장
-        final ratingElement = document.querySelector(
-          '.rating-star-num, .sdp-review__average__total-star__info-gray > span, .star-rating__inner',
-        );
-        final ratingWidthStyle = ratingElement?.attributes['style'] ?? '';
-        // 소수점을 포함한 width 값도 처리하도록 정규식 수정
-        final ratingWidthMatch = RegExp(
-          r'width:\s*(\d+\.?\d*)%',
-        ).firstMatch(ratingWidthStyle);
-        final rating =
-            (double.tryParse(ratingWidthMatch?.group(1) ?? '0') ?? 0) / 20;
+        // 1. 리뷰 수 파싱 (순차적 시도)
+        final reviewSelectors = [
+          '.rating-count-txt', // 요청된 선택자: <span class="rating-count-txt">20,515개 상품평</span>
+          '.rating-total-count', // 가장 일반적: (20,515)
+          '.sdp-review__average__total-star__info-count',
+        ];
+        for (var selector in reviewSelectors) {
+          final element = document.querySelector(selector);
+          if (element != null) {
+            reviewCount = _parsePrice(element.text);
+            if (reviewCount > 0) break; // 유효한 값을 찾으면 중단
+          }
+        }
+
+        // 2. 별점 파싱 (순차적 시도)
+        final ratingSelectors = [
+          '.rating-star-num', // 요청된 선택자: <span class="rating-star-num" style="width:100%">
+          '.star-rating__inner', // 예: <span class="star-rating__inner" style="width: 100%">
+          '.sdp-review__average__total-star__info-gray > span',
+        ];
+        for (var selector in ratingSelectors) {
+          final element = document.querySelector(selector);
+          if (element != null) {
+            final style = element.attributes['style'] ?? '';
+            if (style.contains('width')) {
+              final match = RegExp(r'width:\s*(\d+\.?\d*)%').firstMatch(style);
+              if (match != null) {
+                final widthPercent =
+                    double.tryParse(match.group(1) ?? '0') ?? 0.0;
+                rating = widthPercent / 20.0; // 100% -> 5.0점
+                if (rating > 0) break; // 유효한 값을 찾으면 중단
+              }
+            }
+          }
+        }
 
         print(
           '  ⬅️  상세 정보 결과: 별점 ${rating.toStringAsFixed(1)}, 리뷰 ${reviewCount}개',
         );
 
+        if (reviewCount > 0) {
+          print('  ✅ 리뷰 수: $reviewCount');
+        }
+        if (rating > 0) {
+          print('  ✅ 별점: ${rating.toStringAsFixed(1)}');
+        }
         return Product(
           id: baseProduct.id,
           title: baseProduct.title,

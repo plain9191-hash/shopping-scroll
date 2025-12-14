@@ -161,6 +161,18 @@ class ProductCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // 가격 정보
+                  Text(
+                    _formatPrice(product.currentPrice),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: product.isPriceDown
+                          ? Colors.red[700]
+                          : Colors.blue[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   // 별점 및 리뷰
                   if (product.reviewCount > 0)
                     Row(
@@ -176,18 +188,6 @@ class ProductCard extends StatelessWidget {
                         ),
                       ],
                     ),
-                  const SizedBox(height: 8),
-                  // 가격 정보
-                  Text(
-                    _formatPrice(product.currentPrice),
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: product.isPriceDown
-                          ? Colors.red[700]
-                          : Colors.blue[700],
-                    ),
-                  ),
                 ],
               ),
             ),
