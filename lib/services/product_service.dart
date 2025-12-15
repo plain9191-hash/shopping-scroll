@@ -128,15 +128,17 @@ class ProductService {
   // 실제 네이버 쇼핑 상품 가져오기 (API 또는 스크래핑)
   Future<List<Product>> getNaverShoppingProducts({
     int page = 0,
+    int offset = 0,
     int limit = 10,
   }) async {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     print('🛍️  [네이버 쇼핑] 상품 데이터 가져오기 시작');
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('📄 페이지: $page, 제한: $limit');
+    print('📄 페이지: $page, 오프셋: $offset, 제한: $limit');
 
     // 먼저 API 시도 (API 키가 설정된 경우)
-    if (_naverClientId.isNotEmpty && _naverClientSecret.isNotEmpty) {
+    // 웹 환경에서는 CORS 문제로 API 직접 호출이 불가하므로 스크래핑으로 바로 넘어갑니다.
+    if (!kIsWeb && _naverClientId.isNotEmpty && _naverClientSecret.isNotEmpty) {
       print('🔑 [네이버 쇼핑] API 키 확인됨, API 호출 시도...');
       try {
         final keywords = [
@@ -199,31 +201,20 @@ class ProductService {
       } catch (e) {
         print('❌ [네이버 쇼핑] API 오류: $e');
       }
+    } else if (kIsWeb) {
+      print('⚠️  [네이버 쇼핑] 웹 환경에서는 CORS 정책으로 인해 API를 사용할 수 없습니다.');
+      print('💡 [네이버 쇼핑] 스크래핑으로 전환합니다.');
+      print('💡 [네이버 쇼핑] 안정적인 운영을 위해서는 백엔드 프록시 서버를 통한 API 호출을 권장합니다.');
     } else {
       print('⚠️  [네이버 쇼핑] API 키 미설정, 스크래핑으로 전환...');
     }
 
     // API 실패 시 네이버 쇼핑 메인/베스트 페이지 스크래핑 시도
     try {
-      // 인기 검색어로 검색
-      final keywords = [
-        '노트북',
-        '스마트폰',
-        '이어폰',
-        '키보드',
-        '마우스',
-        '모니터',
-        '태블릿',
-        '스피커',
-        '헤드폰',
-        '웹캠',
-      ];
-      final keyword = keywords[page % keywords.length];
-      final searchUrl =
-          'https://search.shopping.naver.com/search/all?query=${Uri.encodeComponent(keyword)}&pagingIndex=${page + 1}&pagingSize=$limit&sort=price_asc';
+      // 네이버 쇼핑 베스트 페이지 URL
+      final url = 'https://shopping.naver.com/ns/home/best';
 
-      print('🌐 [네이버 쇼핑] 검색 URL: $searchUrl');
-      print('🔍 [네이버 쇼핑] 검색어: "$keyword"');
+      print('🌐 [네이버 쇼핑] 베스트 페이지 URL: $url');
       print('⏳ [네이버 쇼핑] HTTP 요청 시작...');
 
       // 403 오류 방지를 위한 더 나은 헤더 설정
@@ -249,7 +240,7 @@ class ProductService {
       print('📋 [네이버 쇼핑] 요청 헤더 설정 완료');
 
       final response = await http
-          .get(Uri.parse(searchUrl), headers: headers)
+          .get(Uri.parse(url), headers: headers)
           .timeout(const Duration(seconds: 30));
 
       print('✅ [네이버 쇼핑] HTTP 응답 상태: ${response.statusCode}');
@@ -258,7 +249,7 @@ class ProductService {
         final html = response.body;
         print('📦 [네이버 쇼핑] HTML 길이: ${html.length} bytes');
         print('🔍 [네이버 쇼핑] HTML 파싱 시작...');
-        final products = _parseNaverShoppingHtml(html, limit);
+        final products = _parseNaverShoppingHtml(html, offset, limit);
         print('✅ [네이버 쇼핑] 파싱 완료! 상품 수: ${products.length}개');
         if (products.isNotEmpty) {
           print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -313,29 +304,25 @@ class ProductService {
   }
 
   // 네이버 쇼핑 HTML 파싱 (실제 검색 페이지)
-  List<Product> _parseNaverShoppingHtml(String html, int limit) {
+  List<Product> _parseNaverShoppingHtml(String html, int offset, int limit) {
     final products = <Product>[];
     try {
       print('📄 [네이버 쇼핑] HTML 문서 파싱 중...');
       final document = html_parser.parse(html);
 
-      // 네이버 쇼핑 실제 상품 선택자 (더 많은 선택자 시도)
+      // 네이버 쇼핑 베스트 페이지 상품 선택자
       final productElements = document.querySelectorAll(
-        '.product_item, '
-        '.productList_item, '
-        '.basicList_item, '
-        '[class*="productItem"], '
-        '.product_item_list, '
-        'div[class*="product"], '
-        'li[class*="product"], '
-        '.item_list',
+        'li[class^="bestProductCardResponsive_best_product_card_responsive"]',
       );
 
       print('🔍 [네이버 쇼핑] 찾은 상품 요소 수: ${productElements.length}개');
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       int processedCount = 0;
-      for (var element in productElements.take(limit)) {
+      for (var element
+          in productElements
+              .skip(offset)
+              .take(limit > 0 ? limit : productElements.length)) {
         processedCount++;
         print('📦 [네이버 쇼핑] 상품 #$processedCount 처리 중...');
         try {
@@ -343,13 +330,7 @@ class ProductService {
           String title = '';
           final titleSelectors = [
             '.product_title',
-            '.basicList_title',
-            'a[class*="title"]',
-            '.productName',
-            '.title',
-            'strong.title',
-            'a.title',
-            '[class*="title"]',
+            'div[class^="bestProductCardResponsive_title"]',
           ];
 
           for (var selector in titleSelectors) {
@@ -358,12 +339,7 @@ class ProductService {
             if (title.isNotEmpty) break;
           }
 
-          if (title.isEmpty) {
-            title = element.querySelector('a')?.text.trim() ?? '';
-          }
-
           title = title.replaceAll(RegExp(r'\s+'), ' ').trim();
-          // HTML 태그 제거
           title = title.replaceAll(RegExp(r'<[^>]*>'), '').trim();
 
           if (title.isEmpty || title.length < 2) {
@@ -379,17 +355,11 @@ class ProductService {
           String imageUrl = '';
           print('  🖼️  썸네일 이미지 추출 중...');
 
-          // 먼저 상품 이미지 영역 내에서 찾기
-          final imageContainer = element.querySelector(
-            '.product-image, .product_img, .thumb, .thumbnail, [class*="image"], [class*="img"]',
+          final imgElement = element.querySelector(
+            'img[class^="bestProductCardResponsive_image"]',
           );
 
-          final imgElement =
-              imageContainer?.querySelector('img') ??
-              element.querySelector('img');
-
           if (imgElement != null) {
-            // 다양한 이미지 속성 시도
             final imgAttributes = [
               'src',
               'data-img-src',
@@ -441,22 +411,23 @@ class ProductService {
 
           // 가격
           final priceElement = element.querySelector(
-            '.price, .price_num, .lowestPrice, [class*="price"]',
+            'span[class^="priceResponsive_number"]',
           );
           final priceText = priceElement?.text.trim() ?? '';
           final price = _parsePrice(priceText);
 
           // 상품 링크 (상세 페이지)
-          // 상품 ID 추출을 위해 먼저 처리
-          final idElement = element.querySelector('a[data-product-id]');
-          final productId = idElement?.attributes['data-product-id'] ?? '';
+          final productId = element.id;
 
           print('  🔗 상세 페이지 URL 추출 중...');
-          final linkElement =
-              element.querySelector('a[href*="shopping.naver.com"]') ??
-              element.querySelector('a[href*="naver.com"]') ??
-              element.querySelector('a');
+          final linkElement = element.querySelector(
+            'a[class^="bestProductCardResponsive_link"]',
+          );
           String productUrl = linkElement?.attributes['href'] ?? '';
+          if (productUrl.isEmpty) {
+            productUrl = element.querySelector('a')?.attributes['href'] ?? '';
+          }
+
           if (productUrl.isNotEmpty && !productUrl.startsWith('http')) {
             final originalUrl = productUrl;
             if (productUrl.startsWith('//')) {
@@ -484,14 +455,18 @@ class ProductService {
 
           // 리뷰 수 및 별점
           print('  ⭐ 리뷰/별점 추출 중...');
-          final reviewElement = element.querySelector('.etc_review, .review');
+          final reviewElement = element.querySelector(
+            'span[class^="bestProductCardResponsive_review_"]',
+          );
           final reviewText = reviewElement?.text.trim() ?? '';
           final reviewCount = _parsePrice(reviewText);
 
-          final ratingElement = element.querySelector('.star_area, .rating');
-          final ratingText = ratingElement?.text.trim() ?? '0';
-          final rating =
-              double.tryParse(ratingText.replaceAll('별점', '').trim()) ?? 0.0;
+          final ratingElement = element.querySelector(
+            'span[class^="bestProductCardResponsive_rating__"]',
+          );
+          final ratingText =
+              ratingElement?.text.trim().replaceAll('별점', '') ?? '0.0';
+          final rating = double.tryParse(ratingText) ?? 0.0;
 
           if (reviewCount > 0) {
             print('  ✅ 리뷰 수: $reviewCount');
@@ -507,8 +482,19 @@ class ProductService {
               continue;
             }
 
-            final basePrice = (price * 1.1).round();
-            final priceChange = ((price - basePrice) / basePrice * 100);
+            final originalPriceElement = element.querySelector(
+              'span[class^="priceResponsive_original_price__"]',
+            );
+            final originalPrice = _parsePrice(
+              originalPriceElement?.text.trim() ?? '',
+            );
+
+            final basePrice = originalPrice > 0
+                ? originalPrice
+                : (price * 1.1).round();
+            final priceChange = basePrice > 0
+                ? ((price - basePrice) / basePrice * 100)
+                : 0.0;
 
             print(
               '  💰 가격: ${price.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]},')}원',
@@ -723,9 +709,10 @@ class ProductService {
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
       int processedCount = 0;
-      List<Future<Product?>> detailFutures = [];
-
-      for (var element in productElements.skip(offset).take(limit)) {
+      for (var element
+          in productElements
+              .skip(offset)
+              .take(limit > 0 ? limit : productElements.length)) {
         processedCount++;
         print('📦 [쿠팡] 상품 #$processedCount 처리 중...');
         try {
@@ -879,11 +866,14 @@ class ProductService {
 
           print('  🔗 상세 페이지 URL 추출 중...');
           final linkElement =
+              element.querySelector(
+                'a.search-product-link',
+              ) ?? // BEST100 페이지의 기본 링크 선택자
               element.querySelector('a[href*="/products/"]') ??
               element.querySelector('a[href*="coupang.com"]') ??
               element.querySelector('a');
           String productUrl = linkElement?.attributes['href'] ?? '';
-          if (productUrl.isNotEmpty && !productUrl.startsWith('http')) {
+          if (productUrl.isNotEmpty) {
             final originalUrl = productUrl;
             if (productUrl.startsWith('//')) {
               productUrl = 'https:$productUrl';
@@ -892,7 +882,9 @@ class ProductService {
             } else {
               productUrl = '$_coupangBaseUrl/$productUrl';
             }
-            print('  🔄 상세 페이지 URL 정규화: $originalUrl → $productUrl');
+            if (originalUrl != productUrl) {
+              print('  🔄 상세 페이지 URL 정규화: $originalUrl → $productUrl');
+            }
           }
 
           if (productUrl.isNotEmpty) {
@@ -920,8 +912,38 @@ class ProductService {
               element.querySelector('.badge-rocket, .rocket') != null;
 
           // 리뷰 수 및 별점
+          print('  ⭐ 리뷰/별점 추출 중...');
+          int reviewCount = 0;
+          double rating = 0.0;
 
-          if (title != '상품명 없음' && price > 0) {
+          // 리뷰 수
+          final reviewElement = element.querySelector('.rating-total-count');
+          if (reviewElement != null) {
+            reviewCount = _parsePrice(reviewElement.text);
+            print('  ✅ 리뷰 수: $reviewCount');
+          }
+
+          // 별점 (width %로 계산)
+          final ratingSelectors = [
+            '.star-rating .rating', // 기존 선택자
+            '.rating-star .rating', // 새로운 선택자
+          ];
+          for (var selector in ratingSelectors) {
+            final ratingElement = element.querySelector(selector);
+            if (ratingElement != null) {
+              final style = ratingElement.attributes['style'] ?? '';
+              final match = RegExp(r'width:\s*(\d+\.?\d*)%').firstMatch(style);
+              if (match != null) {
+                final widthPercent =
+                    double.tryParse(match.group(1) ?? '0') ?? 0.0;
+                rating = widthPercent / 20.0; // 100% -> 5.0점
+                print('  ✅ 별점: ${rating.toStringAsFixed(1)}');
+                if (rating > 0) break; // 유효한 값을 찾으면 중단
+              }
+            }
+          }
+
+          if (title.isNotEmpty && price > 0) {
             // 이미지가 없으면 스킵 (실제 상품 이미지만 사용)
             if (imageUrl.isEmpty) {
               print('  ❌ 이미지 없음, 상품 스킵');
@@ -934,31 +956,25 @@ class ProductService {
             print(
               '  💰 가격: ${price.toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (match) => '${match[1]},')}원',
             );
-            print('  ⭐ 리뷰 수: 없음 (상세 페이지에서 가져올 예정)');
-            print('  ⭐ 별점: 없음 (상세 페이지에서 가져올 예정)');
             print('  ✅ [쿠팡] 상품 추가 완료!');
             print('  ──────────────────────────────────────');
-            // 상세 정보 가져오기 Future 추가
-            detailFutures.add(
-              _fetchProductDetails(
-                productUrl,
-                Product(
-                  id: productId.isNotEmpty
-                      ? 'coupang_$productId'
-                      : 'coupang_$productUrl',
-                  title: title,
-                  imageUrl: imageUrl,
-                  currentPrice: price,
-                  averagePrice: basePrice,
-                  priceChangePercent: priceChange,
-                  source: 'coupang',
-                  isRocketDelivery: isRocket,
-                  isLowestPrice: priceChange < -20,
-                  productUrl: productUrl,
-                  // 기본값 설정
-                  reviewCount: 0,
-                  averageRating: 0.0,
-                ),
+
+            products.add(
+              Product(
+                id: productId.isNotEmpty
+                    ? 'coupang_$productId'
+                    : 'coupang_$productUrl',
+                title: title,
+                imageUrl: imageUrl,
+                currentPrice: price,
+                averagePrice: basePrice,
+                priceChangePercent: priceChange,
+                source: 'coupang',
+                isRocketDelivery: isRocket,
+                isLowestPrice: priceChange < -20,
+                productUrl: productUrl,
+                reviewCount: reviewCount,
+                averageRating: rating,
               ),
             );
           }
@@ -968,110 +984,12 @@ class ProductService {
         }
       }
       print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('⏳ [쿠팡] 총 ${detailFutures.length}개 상품 상세 정보 가져오는 중...');
-
-      final detailedProducts = await Future.wait(detailFutures);
-      products.addAll(detailedProducts.whereType<Product>());
-
       print('✅ [쿠팡] 총 ${products.length}개 상품 파싱 완료');
     } catch (e) {
       print('❌ [쿠팡] HTML 파싱 오류: $e');
     }
 
     return products;
-  }
-
-  // 상품 상세 페이지에서 별점/리뷰 수 가져오기
-  Future<Product?> _fetchProductDetails(
-    String productUrl,
-    Product baseProduct,
-  ) async {
-    try {
-      print('  ➡️  상세 정보 요청: $productUrl');
-      final response = await http
-          .get(
-            Uri.parse(productUrl),
-            headers: {
-              'User-Agent':
-                  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            },
-          )
-          .timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        final document = html_parser.parse(response.body);
-
-        int reviewCount = 0;
-        double rating = 0.0;
-
-        // 1. 리뷰 수 파싱 (순차적 시도)
-        final reviewSelectors = [
-          '.rating-count-txt', // 요청된 선택자: <span class="rating-count-txt">20,515개 상품평</span>
-          '.rating-total-count', // 가장 일반적: (20,515)
-          '.sdp-review__average__total-star__info-count',
-        ];
-        for (var selector in reviewSelectors) {
-          final element = document.querySelector(selector);
-          if (element != null) {
-            reviewCount = _parsePrice(element.text);
-            if (reviewCount > 0) break; // 유효한 값을 찾으면 중단
-          }
-        }
-
-        // 2. 별점 파싱 (순차적 시도)
-        final ratingSelectors = [
-          '.rating-star-num', // 요청된 선택자: <span class="rating-star-num" style="width:100%">
-          '.star-rating__inner', // 예: <span class="star-rating__inner" style="width: 100%">
-          '.sdp-review__average__total-star__info-gray > span',
-        ];
-        for (var selector in ratingSelectors) {
-          final element = document.querySelector(selector);
-          if (element != null) {
-            final style = element.attributes['style'] ?? '';
-            if (style.contains('width')) {
-              final match = RegExp(r'width:\s*(\d+\.?\d*)%').firstMatch(style);
-              if (match != null) {
-                final widthPercent =
-                    double.tryParse(match.group(1) ?? '0') ?? 0.0;
-                rating = widthPercent / 20.0; // 100% -> 5.0점
-                if (rating > 0) break; // 유효한 값을 찾으면 중단
-              }
-            }
-          }
-        }
-
-        print(
-          '  ⬅️  상세 정보 결과: 별점 ${rating.toStringAsFixed(1)}, 리뷰 ${reviewCount}개',
-        );
-
-        if (reviewCount > 0) {
-          print('  ✅ 리뷰 수: $reviewCount');
-        }
-        if (rating > 0) {
-          print('  ✅ 별점: ${rating.toStringAsFixed(1)}');
-        }
-        return Product(
-          id: baseProduct.id,
-          title: baseProduct.title,
-          imageUrl: baseProduct.imageUrl,
-          currentPrice: baseProduct.currentPrice,
-          averagePrice: baseProduct.averagePrice,
-          priceChangePercent: baseProduct.priceChangePercent,
-          source: baseProduct.source,
-          isRocketDelivery: baseProduct.isRocketDelivery,
-          isLowestPrice: baseProduct.isLowestPrice,
-          productUrl: baseProduct.productUrl,
-          reviewCount: reviewCount,
-          averageRating: rating,
-        );
-      } else {
-        print('  ⚠️  상세 정보 요청 실패 (${response.statusCode}), 기본 정보 사용');
-        return baseProduct; // 실패 시 기본 상품 정보 반환
-      }
-    } catch (e) {
-      print('  ❌ 상세 정보 요청 오류: $e, 기본 정보 사용');
-      return baseProduct; // 오류 발생 시 기본 상품 정보 반환
-    }
   }
 
   // 가격 텍스트에서 숫자 추출

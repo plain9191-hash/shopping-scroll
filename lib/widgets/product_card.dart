@@ -11,24 +11,24 @@ class ProductCard extends StatelessWidget {
 
   const ProductCard({super.key, required this.product, this.onTap});
 
-  Future<void> _launchUrl(String url) async {
+  Future<void> _launchUrl(BuildContext context, String url) async {
     if (url.isEmpty) {
       print('URL이 비어있습니다');
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('상품 링크가 존재하지 않습니다.')));
       return;
     }
 
-    try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(
-          uri,
-          mode: LaunchMode.externalApplication, // 새 창에서 열기
-        );
-      } else {
-        print('URL을 열 수 없습니다: $url');
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      print('URL을 열 수 없습니다: $url');
+      // 사용자에게 피드백 제공
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('브라우저를 열 수 없습니다: $url')));
       }
-    } catch (e) {
-      print('URL 실행 오류: $e - URL: $url');
     }
   }
 
@@ -44,8 +44,8 @@ class ProductCard extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         onTap: () async {
-          if (product.productUrl != null && product.productUrl!.isNotEmpty) {
-            await _launchUrl(product.productUrl!);
+          if (product.productUrl != null) {
+            await _launchUrl(context, product.productUrl!);
           } else {
             // URL이 없으면 사용자에게 알림
             if (onTap != null) {
