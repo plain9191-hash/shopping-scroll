@@ -14,8 +14,8 @@ class ProductService {
   final String _naverClientId = dotenv.env['NAVER_CLIENT_ID'] ?? '';
   final String _naverClientSecret = dotenv.env['NAVER_CLIENT_SECRET'] ?? '';
 
-  // 실제 쿠팡 상품 스크래핑 (메인/베스트 페이지)
   Future<List<Product>> getCoupangProducts({
+    String? categoryId,
     int page = 0,
     int offset = 0,
     int limit = 10,
@@ -23,7 +23,7 @@ class ProductService {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     print('🛒 [쿠팡] 상품 데이터 가져오기 시작');
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('📄 페이지: $page, 제한: $limit');
+    print('📄 카테고리: ${categoryId ?? '전체'}, 페이지: $page, 제한: $limit');
 
     // 웹 환경에서 CORS 문제 경고
     if (kIsWeb) {
@@ -37,7 +37,9 @@ class ProductService {
 
     try {
       // 쿠팡 베스트100 페이지 URL (offset과 limit은 파싱 단계에서 사용)
-      final url = 'https://www.coupang.com/np/best100/bestseller';
+      final baseUrl = '$_coupangBaseUrl/np/best100/bestseller';
+      final url =
+          (categoryId?.isNotEmpty ?? false) ? '$baseUrl/$categoryId' : baseUrl;
 
       print('🌐 [쿠팡] 페이지 URL: $url');
       print('⏳ [쿠팡] HTTP 요청 시작...');

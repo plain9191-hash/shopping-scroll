@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/product.dart';
 import '../services/product_service.dart';
 import '../widgets/product_card.dart';
+import '../widgets/category_selector.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,6 +21,25 @@ class _HomeScreenState extends State<HomeScreen>
   final ProductService _productService = ProductService();
   final ScrollController _scrollController = ScrollController();
   late TabController _tabController;
+
+  final Map<String, String> _coupangCategories = {
+    '전체': '',
+    '패션의류/잡화': '564553',
+    '뷰티': '564684',
+    '출산/유아동': '564531',
+    '식품': '564542',
+    '주방용품': '564703',
+    '생활용품': '564693',
+    '가전/디지털': '564520',
+    '스포츠/레저': '564564',
+    '자동차용품': '564574',
+    '도서/음반/DVD': '564584',
+    '완구/취미': '564673',
+    '문구/오피스': '564603',
+    '반려동물용품': '564613',
+    '여행/티켓': '564623',
+  };
+  String _selectedCoupangCategoryId = '';
 
   List<Product> _coupangProducts = [];
   List<Product> _naverProducts = [];
@@ -67,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen>
       if (_tabController.index == 0) {
         // 쿠팡 상품 로드
         final newProducts = await _productService.getCoupangProducts(
+          categoryId: _selectedCoupangCategoryId,
           offset: _currentCoupangOffset,
           limit: 100, // 최대 100개 가져오기
         );
@@ -236,6 +257,22 @@ class _HomeScreenState extends State<HomeScreen>
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
+          if (_tabController.index == 0)
+            SliverToBoxAdapter(
+              child: CategorySelector(
+                categories: _coupangCategories,
+                selectedCategoryId: _selectedCoupangCategoryId,
+                onCategorySelected: (categoryId) {
+                  setState(() {
+                    _selectedCoupangCategoryId = categoryId;
+                    _coupangProducts = [];
+                    _currentCoupangOffset = 0;
+                    _hasMoreCoupang = true;
+                  });
+                  _loadInitialProducts();
+                },
+              ),
+            ),
           _buildHeader(
             _tabController.index == 0 ? '쿠팡 BEST 100' : '네이버 인기 BEST',
           ),
@@ -258,7 +295,10 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Text(
               title,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -277,19 +317,31 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildProductGrid(List<Product> products) {
-    return SliverList(
-      delegate: SliverChildBuilderDelegate((context, index) {
-        if (index < products.length) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            child: ProductCard(
-              product: products[index],
-              rank: index + 1,
-            ),
-          );
-        }
-        return null;
-      }, childCount: products.length),
+    final screenWidth = MediaQuery.of(context).size.width;
+    final crossAxisCount = screenWidth > 600 ? 2 : 1;
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(8.0),
+      sliver: SliverGrid(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: crossAxisCount,
+          childAspectRatio: crossAxisCount == 2 ? 1 / 1.5 : 1 / 1.6,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            if (index < products.length) {
+              return ProductCard(
+                product: products[index],
+                rank: index + 1,
+              );
+            }
+            return null;
+          },
+          childCount: products.length,
+        ),
+      ),
     );
   }
 
