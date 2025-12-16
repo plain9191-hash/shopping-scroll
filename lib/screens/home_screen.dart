@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/product.dart';
 import '../services/product_service.dart';
 import '../widgets/product_card.dart';
@@ -30,9 +35,12 @@ class _HomeScreenState extends State<HomeScreen>
     _tabController = TabController(length: 2, vsync: this);
     _loadInitialProducts();
     // _scrollController.addListener(_onScroll); // 한 번에 100개를 로드하므로 무한 스크롤 비활성화
+
+    // 탭 변경을 감지하여 UI를 다시 그리도록 setState 호출
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging) {
-        // 탭 변경 시, 해당 탭의 상품이 비어있으면 새로 로드
+      // 탭 전환 애니메이션이 완료된 시점에 UI를 업데이트하고, 필요하면 데이터 로드
+      if (!_tabController.indexIsChanging) {
+        setState(() {}); // 탭 UI(헤더 등)를 올바르게 업데이트하기 위해 호출
         if (_tabController.index == 0 && _coupangProducts.isEmpty) {
           _loadInitialProducts();
         } else if (_tabController.index == 1 && _naverProducts.isEmpty) {
@@ -70,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen>
           _coupangProducts = uniqueProducts;
           _currentCoupangOffset = uniqueProducts.length;
           _hasMoreCoupang = false; // 한 번에 모두 로드하므로 더 이상 없음
+          _saveProductsToFile(uniqueProducts, 'coupang');
         });
       } else {
         // 네이버 상품 로드
@@ -85,6 +94,7 @@ class _HomeScreenState extends State<HomeScreen>
           _naverProducts = uniqueProducts;
           _currentNaverOffset = uniqueProducts.length;
           _hasMoreNaver = false; // 한 번에 모두 로드하므로 더 이상 없음
+          // _saveProductsToFile(uniqueProducts, 'naver'); // 필요 시 네이버 상품도 저장
         });
       }
     } catch (e) {
@@ -97,6 +107,31 @@ class _HomeScreenState extends State<HomeScreen>
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _saveProductsToFile(
+    List<Product> products,
+    String source,
+  ) async {
+    // 웹 환경에서는 파일 저장을 지원하지 않으므로 스킵
+    if (kIsWeb) {
+      print('웹 환경에서는 파일 저장을 건너뜁니다.');
+      return;
+    }
+    if (products.isEmpty) return;
+
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final date = DateFormat('yy.MM.dd').format(DateTime.now());
+      final fileName = '${source}_products_dt=$date.json';
+      final file = File('${directory.path}/$fileName');
+
+      final jsonList = products.map((p) => p.toJson()).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+      print('✅ 상품 데이터가 파일에 저장되었습니다: ${file.path}');
+    } catch (e) {
+      print('❌ 파일 저장 중 오류 발생: $e');
     }
   }
 
@@ -213,6 +248,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   SliverToBoxAdapter _buildHeader(String title) {
+    final date = DateFormat('yy.MM.dd').format(DateTime.now());
     return SliverToBoxAdapter(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -229,30 +265,31 @@ class _HomeScreenState extends State<HomeScreen>
               '실시간 가격 변동을 추적하는 인기 상품 목록입니다.',
               style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
+            const SizedBox(height: 8),
+            Text(
+              '$date 기준',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
           ],
         ),
       ),
     );
   }
 
-  SliverPadding _buildProductGrid(List<Product> products) {
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.7,
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-        ),
-        delegate: SliverChildBuilderDelegate((context, index) {
-          if (index < products.length) {
-            final product = products[index];
-            return ProductCard(product: product);
-          }
-          return null;
-        }, childCount: products.length),
-      ),
+  Widget _buildProductGrid(List<Product> products) {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate((context, index) {
+        if (index < products.length) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            child: ProductCard(
+              product: products[index],
+              rank: index + 1,
+            ),
+          );
+        }
+        return null;
+      }, childCount: products.length),
     );
   }
 

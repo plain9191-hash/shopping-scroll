@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/home_screen.dart';
+import 'theme/custom_colors.dart';
 
 Future<void> main() async {
   await dotenv.load(fileName: ".env");
@@ -18,17 +19,23 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.orange,
+          seedColor: const Color(0xFF007AFF),
           brightness: Brightness.light,
         ),
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.grey[50],
+        scaffoldBackgroundColor: Colors.grey[100],
         cardTheme: CardThemeData(
-          elevation: 2,
+          elevation: 1,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
+        extensions: const <ThemeExtension<dynamic>>[
+          CustomColors(
+            priceUp: Color(0xFF34C759),
+            priceDown: Color(0xFFFF453A),
+          ),
+        ],
       ),
       home: const HomeScreen(),
       // 웹에서 모바일 뷰포트 설정

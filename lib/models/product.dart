@@ -3,6 +3,7 @@ class Product {
   final String title;
   final String imageUrl;
   final int currentPrice;
+  final int? originalPrice; // Add originalPrice field
   final int averagePrice;
   final double priceChangePercent;
   final String source; // 'coupang' or 'naver'
@@ -18,6 +19,7 @@ class Product {
     required this.title,
     required this.imageUrl,
     required this.currentPrice,
+    this.originalPrice, // Add to constructor
     required this.averagePrice,
     required this.priceChangePercent,
     required this.source,
@@ -33,4 +35,24 @@ class Product {
   bool get isPriceUp => priceChangePercent > 0;
 
   int get priceDifference => currentPrice - averagePrice;
+
+  // JSON 직렬화를 위한 toJson 메서드
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'imageUrl': imageUrl,
+      'currentPrice': currentPrice,
+      'originalPrice': originalPrice, // Add to toJson
+      'averagePrice': averagePrice,
+      'priceChangePercent': priceChangePercent,
+      'source': source,
+      'category': category,
+      'isRocketDelivery': isRocketDelivery,
+      'isLowestPrice': isLowestPrice,
+      'reviewCount': reviewCount,
+      'averageRating': averageRating,
+      'productUrl': productUrl,
+    };
+  }
 }
