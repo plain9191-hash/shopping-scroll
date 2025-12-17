@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/product.dart';
 import '../services/product_service.dart';
 import '../widgets/category_selector.dart';
@@ -46,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen>
   List<Product> _naverProducts = [];
   bool _isLoading = false;
 
-  DateTime? _selectedDate;
+  DateTime _selectedDate =
+      DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   List<DateTime> _availableDates = [];
 
   @override
@@ -70,23 +70,12 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
-  String _getFileName() {
-    if (_selectedDate == null) return '';
-    final source = _tabController.index == 0 ? 'coupang' : 'naver';
-    final categoryId =
-        (_tabController.index == 0) ? _selectedCoupangCategoryId : 'all';
-    final date = DateFormat('yy.MM.dd').format(_selectedDate!);
-    return '${source}_${categoryId}_products_dt=$date.json';
-  }
-
   Future<void> _initializeScreen() async {
     await _loadAvailableDates();
     if (mounted) {
       setState(() {
-        _selectedDate = DateTime(
-            DateTime.now().year, DateTime.now().month, DateTime.now().day);
-        if (!_availableDates.any((d) => d.isAtSameMomentAs(_selectedDate!))) {
-          _availableDates.add(_selectedDate!);
+        if (!_availableDates.any((d) => d.isAtSameMomentAs(_selectedDate))) {
+          _availableDates.add(_selectedDate);
           _availableDates.sort((a, b) => b.compareTo(a));
         }
       });
@@ -97,21 +86,23 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadAvailableDates() async {
     if (kIsWeb) return;
     try {
-      final directory = await getApplicationDocumentsDirectory();
+      final directory = Directory('data');
+      if (!await directory.exists()) {
+        return; // No data directory, nothing to load
+      }
       final files = directory.listSync();
       final dates = <DateTime>{};
-      final dateFormat = DateFormat('yy.MM.dd');
+      final dateFormat = DateFormat('yyyy-MM-dd');
 
       for (final file in files) {
         final fileName = file.path.split('/').last;
-        final parts = fileName.split('_products_dt=');
-        if (parts.length == 2) {
-          final dateString = parts[1].replaceAll('.json', '');
+        final parts = fileName.split('_');
+        if (parts.length >= 2) {
           try {
-            final date = dateFormat.parse(dateString);
+            final date = dateFormat.parse(parts[0]);
             dates.add(DateTime(date.year, date.month, date.day));
           } catch (e) {
-            // Ignore files with invalid date format
+            // Ignore files with invalid date format in their name
           }
         }
       }
@@ -127,55 +118,45 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> _loadProducts() async {
-    if (_selectedDate == null) return;
-    if (kIsWeb) {
-      await _fetchProductsFromApi();
-      return;
-    }
-
-    final directory = await getApplicationDocumentsDirectory();
-    final fileName = _getFileName();
-    final file = File('${directory.path}/$fileName');
-
-    if (await file.exists()) {
-      await _loadProductsFromFile();
-    } else {
-      await _fetchProductsFromApi();
-    }
+  bool _selectedDateIsToday() {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
   }
 
-  Future<void> _fetchProductsFromApi() async {
+  Future<void> _loadProducts() async {
     if (_isLoading) return;
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      List<Product> newProducts;
+      List<Product> products;
       if (_tabController.index == 0) {
-        newProducts = await _productService.getCoupangProducts(
+        products = await _productService.getCoupangProducts(
           categoryId: _selectedCoupangCategoryId,
-          limit: 100,
+          date: _selectedDate,
         );
       } else {
-        newProducts =
-            await _productService.getNaverShoppingProducts(limit: 100);
+        // TODO: Implement similar caching for Naver
+        products = await _productService.getNaverShoppingProducts(limit: 100);
       }
-
-      final uniqueProducts = _removeDuplicates(newProducts, []);
-      uniqueProducts.sort(
-        (a, b) => a.priceChangePercent.compareTo(b.priceChangePercent),
-      );
 
       if (mounted) {
         setState(() {
           if (_tabController.index == 0) {
-            _coupangProducts = uniqueProducts;
+            _coupangProducts = products;
           } else {
-            _naverProducts = uniqueProducts;
+            _naverProducts = products;
           }
         });
+        if (products.isEmpty && !_selectedDateIsToday()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text(
+                    '${DateFormat('MM/dd').format(_selectedDate)} 데이터가 없습니다.')),
+          );
+        }
       }
-      await _saveProductsToFile(uniqueProducts);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -186,110 +167,24 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> _loadProductsFromFile() async {
-    if (kIsWeb || _selectedDate == null) return;
-    if (_isLoading) return;
-    if (mounted) setState(() => _isLoading = true);
-
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = _getFileName();
-      final file = File('${directory.path}/$fileName');
-
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        final jsonList = jsonDecode(content) as List;
-        final products =
-            jsonList.map((json) => Product.fromJson(json)).toList();
-
-        if (mounted) {
-          setState(() {
-            if (_tabController.index == 0) {
-              _coupangProducts = products;
-            } else {
-              _naverProducts = products;
-            }
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            if (_tabController.index == 0) _coupangProducts = [];
-            if (_tabController.index == 1) _naverProducts = [];
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(
-                    '${DateFormat('MM/dd').format(_selectedDate!)} 데이터가 없습니다.')),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('파일에서 상품을 불러오는 중 오류: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _saveProductsToFile(List<Product> products) async {
-    if (kIsWeb) return;
-    if (products.isEmpty) return;
-
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = _getFileName();
-      if (fileName.isEmpty) return;
-      
-      final file = File('${directory.path}/$fileName');
-
-      final jsonList = products.map((p) => p.toJson()).toList();
-      await file.writeAsString(jsonEncode(jsonList));
-      print('✅ 상품 데이터가 파일에 저장되었습니다: ${file.path}');
-
-      await _loadAvailableDates();
-    } catch (e) {
-      print('❌ 파일 저장 중 오류 발생: $e');
-    }
-  }
-
-  List<Product> _removeDuplicates(
-    List<Product> newProducts,
-    List<Product> existingProducts,
-  ) {
-    final uniqueIds = <String>{};
-    for (final product in existingProducts) {
-      uniqueIds.add(product.id);
-    }
-    final uniqueProducts = <Product>[];
-    for (final product in newProducts) {
-      if (uniqueIds.add(product.id)) {
-        uniqueProducts.add(product);
-      }
-    }
-    return uniqueProducts;
-  }
-
   Future<void> _selectDate(BuildContext context) async {
-    if (_availableDates.isEmpty) await _loadAvailableDates();
-    if (!mounted || _availableDates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('선택 가능한 날짜가 없습니다.')),
-      );
-      return;
+    if (kIsWeb) return;
+    await _loadAvailableDates();
+    if (!mounted) return;
+    if (_availableDates.isEmpty) {
+      // If no dates are loaded, at least allow picking today.
+      final today = DateTime.now();
+      _availableDates.add(DateTime(today.year, today.month, today.day));
     }
 
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
+      initialDate: _selectedDate,
       firstDate: _availableDates.last,
       lastDate: _availableDates.first,
       selectableDayPredicate: (DateTime val) {
-        return _availableDates.any(
-            (d) => d.year == val.year && d.month == val.month && d.day == val.day);
+        return _availableDates
+            .any((d) => d.year == val.year && d.month == val.month && d.day == val.day);
       },
       initialEntryMode: DatePickerEntryMode.calendarOnly,
     );
@@ -298,6 +193,47 @@ class _HomeScreenState extends State<HomeScreen>
         _selectedDate = picked;
       });
       _loadProducts();
+    }
+  }
+
+  Future<void> _fetchAllAndSave() async {
+    if (_isLoading) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('오늘의 모든 카테고리 랭킹을 저장합니다...')),
+    );
+    if (mounted) setState(() => _isLoading = true);
+
+    try {
+      final today =
+          DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+      // === Fetch Coupang ===
+      for (final categoryId in _coupangCategories.values) {
+        // Service will now handle fetching and saving
+        await _productService.getCoupangProducts(
+            categoryId: categoryId, date: today, limit: 100);
+      }
+
+      // TODO: Implement similar logic for Naver
+      // await _productService.getNaverShoppingProducts(date: today, limit: 100);
+
+      // Refresh available dates and current product list
+      await _loadAvailableDates();
+      await _loadProducts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('데이터 저장 중 오류 발생: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('오늘의 랭킹 저장 완료!')),
+        );
+      }
     }
   }
 
@@ -320,6 +256,14 @@ class _HomeScreenState extends State<HomeScreen>
               floating: true,
               pinned: true,
               elevation: 0,
+              actions: [
+                if (!kIsWeb)
+                  IconButton(
+                    icon: const Icon(Icons.download_for_offline_outlined),
+                    tooltip: '오늘의 모든 랭킹 저장',
+                    onPressed: _isLoading ? null : _fetchAllAndSave,
+                  ),
+              ],
               bottom: TabBar(
                 controller: _tabController,
                 indicator: BoxDecoration(
@@ -373,9 +317,7 @@ class _HomeScreenState extends State<HomeScreen>
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              _selectedDate != null
-                  ? DateFormat('yyyy.MM.dd').format(_selectedDate!)
-                  : '날짜를 선택하세요',
+              DateFormat('yyyy.MM.dd').format(_selectedDate),
               style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
@@ -408,30 +350,31 @@ class _HomeScreenState extends State<HomeScreen>
                 },
               ),
             ),
-          if (_isLoading)
-            const SliverToBoxAdapter(
-              child: LinearProgressIndicator(),
-            ),
-          _buildHeader(
-            _tabController.index == 0 ? '쿠팡 BEST 100' : '네이버 인기 BEST',
-          ),
-          if (products.isEmpty && !_isLoading)
+          if (_isLoading && products.isEmpty)
             const SliverFillRemaining(
-              child: Center(
-                child: Text('표시할 상품이 없습니다.',
-                    style: TextStyle(color: Colors.grey)),
-              ),
+              child: Center(child: CircularProgressIndicator()),
             )
-          else
-            _buildProductGrid(products),
+          else ...[
+            _buildHeader(
+              _tabController.index == 0 ? '쿠팡 BEST 100' : '네이버 인기 BEST',
+            ),
+            if (products.isEmpty && !_isLoading)
+              const SliverFillRemaining(
+                child: Center(
+                  child: Text('표시할 상품이 없습니다.',
+                      style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              _buildProductGrid(products),
+          ],
         ],
       ),
     );
   }
 
   SliverToBoxAdapter _buildHeader(String title) {
-    final dateString =
-        _selectedDate != null ? DateFormat('yy.MM.dd').format(_selectedDate!) : '';
+    final dateString = DateFormat('yy.MM.dd').format(_selectedDate);
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
