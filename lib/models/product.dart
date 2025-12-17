@@ -36,6 +36,26 @@ class Product {
 
   int get priceDifference => currentPrice - averagePrice;
 
+  // JSON deserialization
+  factory Product.fromJson(Map<String, dynamic> json) {
+    return Product(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      imageUrl: json['imageUrl'] as String,
+      currentPrice: json['currentPrice'] as int,
+      originalPrice: json['originalPrice'] as int?,
+      averagePrice: json['averagePrice'] as int,
+      priceChangePercent: (json['priceChangePercent'] as num).toDouble(),
+      source: json['source'] as String,
+      category: json['category'] as String?,
+      isRocketDelivery: json['isRocketDelivery'] as bool? ?? false,
+      isLowestPrice: json['isLowestPrice'] as bool? ?? false,
+      reviewCount: json['reviewCount'] as int? ?? 0,
+      averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0.0,
+      productUrl: json['productUrl'] as String?,
+    );
+  }
+
   // JSON 직렬화를 위한 toJson 메서드
   Map<String, dynamic> toJson() {
     return {
