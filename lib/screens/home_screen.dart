@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -7,6 +6,7 @@ import '../models/product.dart';
 import '../services/product_service.dart';
 import '../widgets/category_selector.dart';
 import '../widgets/product_card.dart';
+import 'analytics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -86,7 +86,7 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _loadAvailableDates() async {
     if (kIsWeb) return;
     try {
-      final directory = Directory('data');
+      final directory = Directory(ProductService.dataDirectoryPath);
       if (!await directory.exists()) {
         return; // No data directory, nothing to load
       }
@@ -257,6 +257,19 @@ class _HomeScreenState extends State<HomeScreen>
               pinned: true,
               elevation: 0,
               actions: [
+                if (!kIsWeb)
+                  IconButton(
+                    icon: const Icon(Icons.analytics_outlined),
+                    tooltip: '소싱 분석',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AnalyticsScreen(),
+                        ),
+                      );
+                    },
+                  ),
                 if (!kIsWeb)
                   IconButton(
                     icon: const Icon(Icons.download_for_offline_outlined),
