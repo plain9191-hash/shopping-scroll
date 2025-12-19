@@ -21,25 +21,25 @@ class _HomeScreenState extends State<HomeScreen>
   final ScrollController _scrollController = ScrollController();
   late TabController _tabController;
 
-  final Map<String, String> _coupangCategories = {
-    '전체': '',
-    '패션의류/잡화': '564553',
-    '뷰티': '176422',
-    '출산/유아동': '221834',
-    '식품': '194176',
-    '주방용품': '185569',
-    '생활용품': '115573',
-    '홈인테리어': '184455',
-    '가전디지털': '178155',
-    '스포츠/레저': '317678',
-    '자동차용품': '183960',
-    '도서': '317677',
-    '완구/취미': '317679',
-    '문구/오피스': '317679',
-    '반려/애완': '115574',
-    '헬스/건강식품': '305698',
+  final Map<String, Map<String, String>> _coupangCategories = {
+    '전체': {'id': '', 'key': 'all'},
+    '패션의류/잡화': {'id': '564553', 'key': 'fashion'},
+    '뷰티': {'id': '176422', 'key': 'beauty'},
+    '출산/유아동': {'id': '221834', 'key': 'baby'},
+    '식품': {'id': '194176', 'key': 'food'},
+    '주방용품': {'id': '185569', 'key': 'kitchen'},
+    '생활용품': {'id': '115573', 'key': 'living'},
+    '홈인테리어': {'id': '184455', 'key': 'interior'},
+    '가전디지털': {'id': '178155', 'key': 'digital'},
+    '스포츠/레저': {'id': '317678', 'key': 'sports'},
+    '자동차용품': {'id': '183960', 'key': 'car'},
+    '도서': {'id': '317677', 'key': 'books'},
+    '완구/취미': {'id': '317679', 'key': 'toys'},
+    '문구/오피스': {'id': '177195', 'key': 'office'},
+    '반려/애완': {'id': '115574', 'key': 'pet'},
+    '헬스/건강식품': {'id': '305698', 'key': 'health'},
   };
-  String _selectedCoupangCategoryId = '';
+  String _selectedCoupangCategoryKey = 'all';
 
   List<Product> _coupangProducts = [];
   List<Product> _naverProducts = [];
@@ -80,7 +80,49 @@ class _HomeScreenState extends State<HomeScreen>
         }
       });
     }
+
+    // 앱 실행 시 오늘 날짜의 모든 카테고리 데이터 자동 저장
+    if (!kIsWeb) {
+      await _fetchAllCategoriesOnStartup();
+    }
+
     await _loadProducts();
+  }
+
+  Future<void> _fetchAllCategoriesOnStartup() async {
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final dataDir = Directory(ProductService.dataDirectoryPath);
+
+    // 오늘 날짜 파일이 이미 있는지 확인
+    final todayPrefix = "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+    bool hasTodayData = false;
+
+    if (await dataDir.exists()) {
+      final files = dataDir.listSync();
+      hasTodayData = files.any((f) => f.path.split('/').last.startsWith(todayPrefix));
+    }
+
+    // 오늘 데이터가 없으면 모든 카테고리 가져오기
+    if (!hasTodayData) {
+      print('📥 [초기화] 오늘 데이터가 없습니다. 모든 카테고리 데이터를 가져옵니다...');
+      if (mounted) setState(() => _isLoading = true);
+
+      for (final entry in _coupangCategories.entries) {
+        print('📥 [초기화] "${entry.key}" 카테고리 가져오는 중...');
+        await _productService.getCoupangProducts(
+          categoryId: entry.value['id'] ?? '',
+          categoryKey: entry.value['key'] ?? 'all',
+          date: today,
+          limit: 100,
+        );
+      }
+
+      print('✅ [초기화] 모든 카테고리 데이터 저장 완료!');
+      await _loadAvailableDates();
+      if (mounted) setState(() => _isLoading = false);
+    } else {
+      print('✅ [초기화] 오늘 데이터가 이미 있습니다.');
+    }
   }
 
   Future<void> _loadAvailableDates() async {
@@ -132,8 +174,13 @@ class _HomeScreenState extends State<HomeScreen>
     try {
       List<Product> products;
       if (_tabController.index == 0) {
+        final categoryData = _coupangCategories.values.firstWhere(
+          (data) => data['key'] == _selectedCoupangCategoryKey,
+          orElse: () => {'id': '', 'key': 'all'},
+        );
         products = await _productService.getCoupangProducts(
-          categoryId: _selectedCoupangCategoryId,
+          categoryId: categoryData['id'] ?? '',
+          categoryKey: _selectedCoupangCategoryKey,
           date: _selectedDate,
         );
       } else {
@@ -209,10 +256,14 @@ class _HomeScreenState extends State<HomeScreen>
           DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
       // === Fetch Coupang ===
-      for (final categoryId in _coupangCategories.values) {
+      for (final entry in _coupangCategories.entries) {
         // Service will now handle fetching and saving
         await _productService.getCoupangProducts(
-            categoryId: categoryId, date: today, limit: 100);
+          categoryId: entry.value['id'] ?? '',
+          categoryKey: entry.value['key'] ?? 'all',
+          date: today,
+          limit: 100,
+        );
       }
 
       // TODO: Implement similar logic for Naver
@@ -356,9 +407,9 @@ class _HomeScreenState extends State<HomeScreen>
             SliverToBoxAdapter(
               child: CategorySelector(
                 categories: _coupangCategories,
-                selectedCategoryId: _selectedCoupangCategoryId,
-                onCategorySelected: (categoryId) {
-                  setState(() => _selectedCoupangCategoryId = categoryId);
+                selectedCategoryKey: _selectedCoupangCategoryKey,
+                onCategorySelected: (categoryKey) {
+                  setState(() => _selectedCoupangCategoryKey = categoryKey);
                   _loadProducts();
                 },
               ),

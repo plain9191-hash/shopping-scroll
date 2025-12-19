@@ -5,6 +5,7 @@ import 'package:html/parser.dart' as html_parser;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/product.dart';
+import 'database_service.dart';
 
 class ProductService {
   static const String _coupangBaseUrl = 'https://www.coupang.com';
@@ -16,6 +17,9 @@ class ProductService {
   final String _naverClientId = dotenv.env['NAVER_CLIENT_ID'] ?? '';
   final String _naverClientSecret = dotenv.env['NAVER_CLIENT_SECRET'] ?? '';
 
+  // DB 서비스 인스턴스
+  final DatabaseService _dbService = DatabaseService();
+
   Future<void> _ensureDataDirectoryExists() async {
     final directory = Directory(dataDirectoryPath);
     if (!await directory.exists()) {
@@ -24,19 +28,19 @@ class ProductService {
     }
   }
 
-  String _getFilePath(String categoryId, DateTime date) {
+  String _getFilePath(String categoryKey, DateTime date) {
     final dateString =
         "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-    final catId = (categoryId.isEmpty) ? 'all' : categoryId;
-    return '$dataDirectoryPath/${dateString}_$catId.json';
+    final key = categoryKey.isEmpty ? 'all' : categoryKey;
+    return '$dataDirectoryPath/${dateString}_$key.json';
   }
 
   Future<void> _saveProductsToFile(
-    String categoryId,
+    String categoryKey,
     DateTime date,
     List<Product> products,
   ) async {
-    final filePath = _getFilePath(categoryId, date);
+    final filePath = _getFilePath(categoryKey, date);
     print('💾 [파일 저장] 저장 시도중... 경로: $filePath');
     try {
       await _ensureDataDirectoryExists();
@@ -48,16 +52,23 @@ class ProductService {
       final jsonList = productsWithRanking.map((p) => p.toJson()).toList();
       await file.writeAsString(json.encode(jsonList));
       print('✅ [파일 저장] 저장 완료! 파일명: $filePath');
+
+      // DB에도 저장
+      await _dbService.saveProducts(
+        categoryKey: categoryKey,
+        date: date,
+        products: productsWithRanking,
+      );
     } catch (e) {
       print('❌ [파일 저장] 파일 저장 실패: $e');
     }
   }
 
   Future<List<Product>> _loadProductsFromFile(
-    String categoryId,
+    String categoryKey,
     DateTime date,
   ) async {
-    final filePath = _getFilePath(categoryId, date);
+    final filePath = _getFilePath(categoryKey, date);
     try {
       final file = File(filePath);
       if (await file.exists()) {
@@ -83,11 +94,12 @@ class ProductService {
 
   Future<List<Product>> getCoupangProducts({
     required String categoryId,
+    required String categoryKey,
     required DateTime date,
     int limit = 100,
     int offset = 0,
   }) async {
-    final productsFromFile = await _loadProductsFromFile(categoryId, date);
+    final productsFromFile = await _loadProductsFromFile(categoryKey, date);
     if (productsFromFile.isNotEmpty) {
       return productsFromFile;
     }
@@ -98,7 +110,7 @@ class ProductService {
 
     if (!isToday) {
       print(
-        'ℹ️ [조회] 과거 날짜(${_getFilePath(categoryId, date)})에 대한 데이터 파일이 없습니다. 새로운 데이터를 가져오지 않습니다.',
+        'ℹ️ [조회] 과거 날짜(${_getFilePath(categoryKey, date)})에 대한 데이터 파일이 없습니다. 새로운 데이터를 가져오지 않습니다.',
       );
       return [];
     }
@@ -107,12 +119,13 @@ class ProductService {
 
     final scrapedProducts = await _scrapeCoupangProducts(
       categoryId: categoryId,
+      categoryKey: categoryKey,
       limit: limit,
       offset: offset,
     );
 
     if (scrapedProducts.isNotEmpty) {
-      await _saveProductsToFile(categoryId, date, scrapedProducts);
+      await _saveProductsToFile(categoryKey, date, scrapedProducts);
     }
 
     return scrapedProducts;
@@ -120,115 +133,69 @@ class ProductService {
 
   Future<List<Product>> _scrapeCoupangProducts({
     String? categoryId,
+    String? categoryKey,
     int page = 0,
     int offset = 0,
-    int limit = 10,
+    int limit = 100,
   }) async {
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('🛒 [쿠팡] 상품 데이터 가져오기 시작');
+    print('🛒 [쿠팡] Selenium으로 상품 데이터 가져오기 시작 (100개 목표)');
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    print('📄 카테고리: ${categoryId ?? '전체'}, 페이지: $page, 제한: $limit');
+    print('📄 카테고리: ${categoryKey ?? categoryId ?? '전체'}');
 
-    // 웹 환경에서 CORS 문제 경고
+    // 웹 환경에서는 Python 스크립트 실행 불가
     if (kIsWeb) {
-      print('⚠️  [쿠팡] 웹 환경 감지됨');
-      print('💡 [쿠팡] 웹에서 직접 스크래핑은 CORS 정책으로 제한될 수 있습니다.');
-      print('💡 [쿠팡] 해결 방법:');
-      print('   1. 백엔드 프록시 서버 사용 (권장)');
-      print('   2. Chrome 실행 시 --disable-web-security 플래그 사용 (개발 전용)');
-      print('   3. 모바일/데스크톱 앱으로 실행');
+      print('⚠️  [쿠팡] 웹 환경에서는 Selenium을 사용할 수 없습니다.');
+      return [];
     }
 
+    final key = categoryKey ?? 'all';
+
     try {
-      // 쿠팡 베스트100 페이지 URL (offset과 limit은 파싱 단계에서 사용)
-      final baseUrl = '$_coupangBaseUrl/np/best100/bestseller';
-      final url = (categoryId?.isNotEmpty ?? false)
-          ? '$baseUrl/$categoryId'
-          : baseUrl;
+      // Python 스크립트 실행 (가상환경 사용)
+      final scriptPath = '/Users/grace/price_tracker/scripts/scrape_coupang.py';
+      final venvPython = '/Users/grace/price_tracker/scripts/venv/bin/python3';
+      print('🐍 [쿠팡] Python 스크립트 실행: $venvPython $scriptPath $key');
 
-      print('🌐 [쿠팡] 페이지 URL: $url');
-      print('⏳ [쿠팡] HTTP 요청 시작...');
+      final result = await Process.run(
+        venvPython,
+        [scriptPath, key],
+        workingDirectory: '/Users/grace/price_tracker/scripts',
+      );
 
-      // 403 오류 방지를 위한 더 나은 헤더 설정
-      final headers = {
-        'User-Agent':
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-        'Referer': 'https://www.coupang.com/',
-        'Origin': 'https://www.coupang.com',
-        'DNT': '1',
-      };
+      print('📝 [쿠팡] Python stdout:\n${result.stdout}');
+      if (result.stderr.toString().isNotEmpty) {
+        print('⚠️  [쿠팡] Python stderr:\n${result.stderr}');
+      }
 
-      print('📋 [쿠팡] 요청 헤더 설정 완료');
+      if (result.exitCode != 0) {
+        print('❌ [쿠팡] Python 스크립트 실행 실패: exit code ${result.exitCode}');
+        return [];
+      }
 
-      final response = await http
-          .get(Uri.parse(url), headers: headers)
-          .timeout(const Duration(seconds: 30));
+      // JSON 파일 읽기
+      final today = DateTime.now();
+      final dateString = "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+      final jsonPath = '$dataDirectoryPath/${dateString}_$key.json';
 
-      print('✅ [쿠팡] HTTP 응답 상태: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final html = response.body;
-        print('📦 [쿠팡] HTML 길이: ${html.length} bytes');
-        print('🔍 [쿠팡] HTML 파싱 시작...');
-        final products = await _parseCoupangHtml(html, offset, limit);
-        print('✅ [쿠팡] 파싱 완료! 상품 수: ${products.length}개');
-        if (products.isNotEmpty) {
-          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-          return products;
-        } else {
-          print('⚠️  [쿠팡] 파싱된 상품이 없습니다.');
-        }
-      } else if (response.statusCode == 403) {
-        print('❌ [쿠팡] 403 Forbidden - 서버가 요청을 차단했습니다.');
-        if (kIsWeb) {
-          print('💡 [쿠팡] 웹 환경에서 403 오류는 CORS 정책 때문일 수 있습니다.');
-          print('💡 [쿠팡] 해결 방법:');
-          print('   1. 백엔드 프록시 서버 구축 (가장 안정적)');
-          print(
-            '   2. Chrome 실행: flutter run -d chrome --web-browser-flag="--disable-web-security"',
-          );
-          print('   3. 모바일/데스크톱 앱으로 실행');
-        } else {
-          print('💡 [쿠팡] 서버가 봇 요청을 차단했습니다.');
-        }
-      } else if (response.statusCode == 404) {
-        print('❌ [쿠팡] 404 Not Found - 페이지를 찾을 수 없습니다.');
-        print('💡 [쿠팡] URL이 변경되었거나 접근할 수 없습니다.');
+      final file = File(jsonPath);
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final jsonList = json.decode(contents) as List;
+        final products = jsonList
+            .map((j) => Product.fromJson(j as Map<String, dynamic>))
+            .toList();
+        print('✅ [쿠팡] ${products.length}개 상품 로드 완료');
+        return products;
       } else {
-        print('❌ [쿠팡] HTTP 응답 오류: ${response.statusCode}');
-        if (response.statusCode == 429) {
-          print('⚠️  [쿠팡] 요청이 너무 많습니다. 잠시 후 다시 시도하세요.');
-        }
+        print('❌ [쿠팡] JSON 파일을 찾을 수 없습니다: $jsonPath');
       }
     } catch (e) {
       print('❌ [쿠팡] 스크래핑 오류: $e');
-      if (kIsWeb && e.toString().contains('CORS') ||
-          e.toString().contains('XMLHttpRequest')) {
-        print('💡 [쿠팡] CORS 오류 감지됨');
-        print('💡 [쿠팡] 웹에서 직접 스크래핑은 브라우저 보안 정책으로 제한됩니다.');
-        print('💡 [쿠팡] 해결 방법:');
-        print('   1. 백엔드 프록시 서버 구축 (권장)');
-        print(
-          '   2. Chrome 실행: flutter run -d chrome --web-browser-flag="--disable-web-security"',
-        );
-        print('   3. 모바일/데스크톱 앱으로 실행');
-      }
       print('스택 트레이스: ${StackTrace.current}');
     }
 
     print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    // 실패 시 빈 리스트 반환
     return [];
   }
 

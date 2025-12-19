@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 class CategorySelector extends StatefulWidget {
-  final Map<String, String> categories;
-  final String selectedCategoryId;
+  final Map<String, Map<String, String>> categories;
+  final String selectedCategoryKey;
   final Function(String) onCategorySelected;
 
   const CategorySelector({
     super.key,
     required this.categories,
-    required this.selectedCategoryId,
+    required this.selectedCategoryKey,
     required this.onCategorySelected,
   });
 
@@ -39,15 +39,18 @@ class _CategorySelectorState extends State<CategorySelector> {
   }
 
   void _onCategoryTap(int index) {
-    final categoryId = widget.categories.values.elementAt(index);
-    widget.onCategorySelected(categoryId);
-    
-    // The parent widget will rebuild this widget with the new selectedCategoryId,
+    final categoryData = widget.categories.values.elementAt(index);
+    final categoryKey = categoryData['key'] ?? 'all';
+    widget.onCategorySelected(categoryKey);
+
+    // The parent widget will rebuild this widget with the new selectedCategoryKey,
     // and didUpdateWidget will trigger the scroll.
   }
-  
+
   void _scrollToSelected() {
-    final selectedIndex = widget.categories.values.toList().indexOf(widget.selectedCategoryId);
+    final selectedIndex = widget.categories.values.toList().indexWhere(
+      (data) => data['key'] == widget.selectedCategoryKey,
+    );
     if (selectedIndex != -1) {
       final key = _tabKeys[selectedIndex];
       final context = key.currentContext;
@@ -77,8 +80,9 @@ class _CategorySelectorState extends State<CategorySelector> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemBuilder: (context, index) {
           final categoryName = widget.categories.keys.elementAt(index);
-          final categoryId = widget.categories.values.elementAt(index);
-          final isSelected = widget.selectedCategoryId == categoryId;
+          final categoryData = widget.categories.values.elementAt(index);
+          final categoryKey = categoryData['key'] ?? 'all';
+          final isSelected = widget.selectedCategoryKey == categoryKey;
 
           return GestureDetector(
             key: _tabKeys[index],

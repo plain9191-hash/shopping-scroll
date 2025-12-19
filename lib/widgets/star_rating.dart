@@ -16,7 +16,6 @@ class StarRating extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('⭐ [StarRating] 별점 값: $rating');
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
