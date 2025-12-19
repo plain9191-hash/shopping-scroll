@@ -6,6 +6,7 @@
 
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -13,8 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 
 # 카테고리 매핑
@@ -41,39 +41,73 @@ DATA_DIR = '/Users/grace/price_tracker/data'
 
 
 def setup_driver():
-    """Chrome 드라이버 설정"""
+    """Chrome 드라이버 설정 (봇 감지 우회 포함)"""
     options = Options()
-    options.add_argument('--headless')  # 헤드리스 모드
+    options.add_argument('--headless=new')  # 새로운 headless 모드
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-blink-features=AutomationControlled')
+    options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    options.add_experimental_option('useAutomationExtension', False)
     options.add_argument('--window-size=1920,1080')
     options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
+
+    # webdriver 감지 우회
+    driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+        'source': '''
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined
+            })
+        '''
+    })
+
     return driver
 
 
-def scroll_to_bottom(driver, max_scrolls=10):
-    """페이지 끝까지 스크롤"""
-    last_height = driver.execute_script("return document.body.scrollHeight")
+def scroll_and_load_all(driver, target_count=100):
+    """스크롤하여 모든 상품 로드 (100개 목표)"""
+    body = driver.find_element(By.TAG_NAME, 'body')
+    last_count = 0
+    no_change_count = 0
 
-    for i in range(max_scrolls):
-        # 스크롤 다운
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(1.5)  # 로딩 대기
+    for i in range(50):  # 최대 50번 시도
+        products = driver.find_elements(By.CSS_SELECTOR, 'li.search-product')
+        current_count = len(products)
 
-        # 새 높이 확인
-        new_height = driver.execute_script("return document.body.scrollHeight")
-        print(f"  스크롤 {i+1}/{max_scrolls} - 높이: {new_height}")
+        if current_count != last_count:
+            print(f"  스크롤 {i+1}: {current_count}개 로드됨")
+            last_count = current_count
+            no_change_count = 0
+        else:
+            no_change_count += 1
 
-        if new_height == last_height:
-            print("  더 이상 스크롤할 내용이 없습니다.")
+        if current_count >= target_count:
+            print(f"  ✅ {target_count}개 이상 로드 완료!")
             break
-        last_height = new_height
 
-    return
+        # 여러 방식으로 스크롤 시도
+        if i % 3 == 0:
+            body.send_keys(Keys.END)
+        elif i % 3 == 1:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        else:
+            if products:
+                driver.execute_script(
+                    "arguments[0].scrollIntoView({behavior: 'smooth', block: 'end'});",
+                    products[-1]
+                )
+
+        time.sleep(2)
+
+        # 변화가 5번 연속 없으면 중단
+        if no_change_count >= 5:
+            print(f"  더 이상 로드되지 않음 (총 {current_count}개)")
+            break
+
+    return driver.find_elements(By.CSS_SELECTOR, 'li.search-product')
 
 
 def scrape_category(driver, category_key, category_id):
@@ -87,25 +121,21 @@ def scrape_category(driver, category_key, category_id):
     print('='*50)
 
     driver.get(url)
-    time.sleep(2)  # 초기 로딩 대기
+    time.sleep(5)  # 초기 로딩 대기
 
     # 스크롤해서 모든 상품 로드
-    scroll_to_bottom(driver)
-
-    # 상품 요소 찾기 (li.search-product 사용)
-    products = []
-    product_elements = driver.find_elements(By.CSS_SELECTOR, 'li.search-product')
-
+    product_elements = scroll_and_load_all(driver)
     print(f"찾은 상품 수: {len(product_elements)}")
 
+    products = []
     for idx, elem in enumerate(product_elements[:100]):  # 최대 100개
         try:
-            # 상품 ID (data-product-id 속성에서)
+            # 상품 ID
             product_id = elem.get_attribute('data-product-id') or elem.get_attribute('id') or ''
 
             # 상품명
             title = ''
-            for selector in ['div.name', '.name', 'dt.name', 'a.search-product-link']:
+            for selector in ['div.name', '.name', 'dt.name']:
                 try:
                     title_elem = elem.find_element(By.CSS_SELECTOR, selector)
                     title = title_elem.text.strip()
@@ -173,13 +203,11 @@ def scrape_category(driver, category_key, category_id):
             try:
                 rating_elem = elem.find_element(By.CSS_SELECTOR, 'em.rating')
                 rating_style = rating_elem.get_attribute('style') or ''
-                # width: 96% 형태에서 숫자 추출
                 if 'width' in rating_style:
-                    import re
                     match = re.search(r'width:\s*([\d.]+)%', rating_style)
                     if match:
                         width_percent = float(match.group(1))
-                        average_rating = round(width_percent / 20, 1)  # 100% = 5점
+                        average_rating = round(width_percent / 20, 1)
             except:
                 pass
 
@@ -189,7 +217,6 @@ def scrape_category(driver, category_key, category_id):
                 elem.find_element(By.CSS_SELECTOR, '.badge.rocket, .badge-rocket, img[alt*="로켓"]')
                 is_rocket = True
             except:
-                # 텍스트에서 로켓배송 확인
                 if '로켓배송' in elem.text or '로켓직구' in elem.text:
                     is_rocket = True
 
@@ -241,7 +268,6 @@ def save_to_json(products, category_key):
 
 def main():
     """메인 함수"""
-    # 명령줄 인자로 카테고리 지정 가능
     if len(sys.argv) > 1:
         categories_to_scrape = sys.argv[1:]
     else:
@@ -266,7 +292,6 @@ def main():
             if products:
                 save_to_json(products, category_key)
 
-            # 카테고리 간 딜레이
             time.sleep(2)
 
     finally:
