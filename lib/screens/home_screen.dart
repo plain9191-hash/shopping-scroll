@@ -118,6 +118,10 @@ class _HomeScreenState extends State<HomeScreen>
       }
 
       print('✅ [초기화] 모든 카테고리 데이터 저장 완료!');
+
+      // 모든 JSON 파일을 DB로 동기화
+      await _productService.syncAllJsonToDatabase();
+
       await _loadAvailableDates();
       if (mounted) setState(() => _isLoading = false);
     } else {
@@ -243,6 +247,32 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<void> _syncToDatabase() async {
+    if (_isLoading) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('JSON 파일을 DB로 동기화합니다...')),
+    );
+    if (mounted) setState(() => _isLoading = true);
+
+    try {
+      await _productService.syncAllJsonToDatabase();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('DB 동기화 완료!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('DB 동기화 실패: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _fetchAllAndSave() async {
     if (_isLoading) return;
 
@@ -266,8 +296,8 @@ class _HomeScreenState extends State<HomeScreen>
         );
       }
 
-      // TODO: Implement similar logic for Naver
-      // await _productService.getNaverShoppingProducts(date: today, limit: 100);
+      // 모든 JSON 파일을 DB로 동기화
+      await _productService.syncAllJsonToDatabase();
 
       // Refresh available dates and current product list
       await _loadAvailableDates();
@@ -326,6 +356,12 @@ class _HomeScreenState extends State<HomeScreen>
                     icon: const Icon(Icons.download_for_offline_outlined),
                     tooltip: '오늘의 모든 랭킹 저장',
                     onPressed: _isLoading ? null : _fetchAllAndSave,
+                  ),
+                if (!kIsWeb)
+                  IconButton(
+                    icon: const Icon(Icons.sync),
+                    tooltip: 'JSON → DB 동기화',
+                    onPressed: _isLoading ? null : _syncToDatabase,
                   ),
               ],
               bottom: TabBar(

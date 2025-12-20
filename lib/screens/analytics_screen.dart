@@ -52,10 +52,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<void> _loadAvailableCategories() async {
     final categories = await _analyticsService.getAvailableCategories();
     setState(() {
-      _availableCategories = categories;
-      // 첫 번째 사용 가능한 카테고리 선택
-      if (categories.isNotEmpty && _selectedCategoryId.isEmpty) {
-        _selectedCategoryId = categories.first;
+      // 'all' 카테고리를 맨 앞에 오도록 정렬
+      final sortedCategories = categories.toList();
+      sortedCategories.sort((a, b) {
+        if (a == 'all') return -1;
+        if (b == 'all') return 1;
+        return a.compareTo(b);
+      });
+      _availableCategories = sortedCategories.toSet();
+
+      // 'all'이 있으면 선택, 없으면 첫 번째 카테고리 선택
+      if (categories.contains('all')) {
+        _selectedCategoryId = 'all';
+      } else if (categories.isNotEmpty && _selectedCategoryId.isEmpty) {
+        _selectedCategoryId = sortedCategories.first;
       }
     });
     if (_selectedCategoryId.isNotEmpty) {
@@ -96,6 +106,98 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return categoryId.isEmpty ? '전체' : categoryId;
   }
 
+  void _showScoringInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('소싱 점수 계산법'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildInfoSection(
+                '종합 점수',
+                '(등장 점수 × 0.5) + (순위 점수 × 0.5)',
+                Colors.purple,
+              ),
+              const SizedBox(height: 16),
+              _buildInfoSection(
+                '등장 점수 (50%)',
+                '(등장 횟수 ÷ 분석 기간) × 100\n\n'
+                    '예) 7일 중 7일 등장 → 100점\n'
+                    '예) 7일 중 3일 등장 → 42.9점',
+                Colors.blue,
+              ),
+              const SizedBox(height: 16),
+              _buildInfoSection(
+                '순위 점수 (50%)',
+                '(1 - 평균순위 ÷ 100) × 100\n\n'
+                    '예) 평균 1위 → 99점\n'
+                    '예) 평균 50위 → 50점\n'
+                    '예) 평균 100위 → 0점',
+                Colors.green,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '높은 점수 = 매일 꾸준히 상위권에 등장하는 상품',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('확인'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoSection(String title, String description, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withAlpha(30),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: color,
+              fontSize: 14,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          description,
+          style: TextStyle(
+            fontSize: 13,
+            color: Colors.grey[700],
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -107,6 +209,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ),
         backgroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: '점수 계산법',
+            onPressed: _showScoringInfoDialog,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -452,6 +561,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 color: Color(0xFF434E78),
                               ),
                             ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                _buildInfoBadge(
+                                  '${item.appearanceCount}회 등장',
+                                  Colors.blue,
+                                ),
+                                const SizedBox(width: 6),
+                                _buildInfoBadge(
+                                  '평균 ${item.averageRank.toStringAsFixed(1)}위',
+                                  Colors.green,
+                                ),
+                              ],
+                            ),
                             if (item.productUrl != null) ...[
                               const SizedBox(height: 8),
                               TextButton.icon(
@@ -489,31 +612,108 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildScoreItem(
-                        '종합 점수',
-                        item.sourcingScore.toStringAsFixed(0),
-                        _getScoreColor(item.sourcingScore),
-                        large: true,
+                  // 종합 점수
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      decoration: BoxDecoration(
+                        color: _getScoreColor(item.sourcingScore).withAlpha(25),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      _buildScoreItem(
-                        '등장 횟수',
-                        '${item.appearanceCount}회',
-                        Colors.blue,
+                      child: Column(
+                        children: [
+                          Text(
+                            item.sourcingScore.toStringAsFixed(1),
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                              color: _getScoreColor(item.sourcingScore),
+                            ),
+                          ),
+                          Text(
+                            '종합 점수',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _getScoreColor(item.sourcingScore),
+                            ),
+                          ),
+                        ],
                       ),
-                      _buildScoreItem(
-                        '평균 순위',
-                        '${item.averageRank.toStringAsFixed(1)}위',
-                        Colors.green,
-                      ),
-                      _buildScoreItem(
-                        '안정성',
-                        item.rankStability < 10 ? '높음' : '보통',
-                        item.rankStability < 10 ? Colors.green : Colors.orange,
-                      ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // 점수 상세 분석
+                  const Text(
+                    '점수 상세 분석',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildScoreBreakdownRow(
+                    '등장 점수',
+                    item.appearanceScore,
+                    0.5,
+                    '${item.appearanceCount}회 / ${item.totalDays}일',
+                    Colors.blue,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildScoreBreakdownRow(
+                    '순위 점수',
+                    item.rankScore,
+                    0.5,
+                    '평균 ${item.averageRank.toStringAsFixed(1)}위',
+                    Colors.green,
+                  ),
+                  const SizedBox(height: 16),
+                  // 계산식 설명
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '계산식',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '종합 = (등장 × 0.5) + (순위 × 0.5)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        Text(
+                          '= (${item.appearanceScore.toStringAsFixed(1)} × 0.5) + (${item.rankScore.toStringAsFixed(1)} × 0.5)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        Text(
+                          '= ${(item.appearanceScore * 0.5).toStringAsFixed(1)} + ${(item.rankScore * 0.5).toStringAsFixed(1)} = ${item.sourcingScore.toStringAsFixed(1)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[800],
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -667,23 +867,70 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  Widget _buildScoreItem(String label, String value, Color color, {bool large = false}) {
-    return Column(
+  Widget _buildScoreBreakdownRow(
+    String label,
+    double score,
+    double weight,
+    String detail,
+    Color color,
+  ) {
+    final weightedScore = score * weight;
+    return Row(
       children: [
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: large ? 28 : 18,
-            fontWeight: FontWeight.bold,
-            color: color,
+        // 라벨
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
+        // 프로그레스 바
+        Expanded(
+          child: Container(
+            height: 20,
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Stack(
+              children: [
+                FractionallySizedBox(
+                  widthFactor: (score / 100).clamp(0, 1),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(180),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+                Center(
+                  child: Text(
+                    '${score.toStringAsFixed(1)}점',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // 가중치 적용 점수
+        SizedBox(
+          width: 50,
+          child: Text(
+            '×${weight.toString()} = ${weightedScore.toStringAsFixed(1)}',
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+            ),
           ),
         ),
       ],

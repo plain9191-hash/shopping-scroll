@@ -209,12 +209,32 @@ class _ProductData {
     required int price,
     required String categoryId,
   }) {
-    rankRecords.add(RankHistory(
-      date: date,
-      rank: rank,
-      price: price,
-      categoryId: categoryId,
-    ));
+    // 같은 날짜에 이미 기록이 있으면 더 높은 순위(낮은 숫자)로 업데이트
+    final existingIndex = rankRecords.indexWhere(
+      (r) => r.date.year == date.year &&
+             r.date.month == date.month &&
+             r.date.day == date.day &&
+             r.categoryId == categoryId,
+    );
+
+    if (existingIndex >= 0) {
+      // 기존 기록이 있으면, 더 높은 순위(낮은 숫자)만 유지
+      if (rank < rankRecords[existingIndex].rank) {
+        rankRecords[existingIndex] = RankHistory(
+          date: date,
+          rank: rank,
+          price: price,
+          categoryId: categoryId,
+        );
+      }
+    } else {
+      rankRecords.add(RankHistory(
+        date: date,
+        rank: rank,
+        price: price,
+        categoryId: categoryId,
+      ));
+    }
   }
 
   ProductAnalytics calculateAnalytics(int totalDays) {
@@ -242,12 +262,11 @@ class _ProductData {
     // 순위 점수: (1 - 평균순위/100) × 100 (1위가 100점, 100위가 0점)
     final rankScore = (1 - (averageRank / 100).clamp(0, 1)) * 100;
 
-    // 안정성 점수: (1 - 순위표준편차/50) × 100 (표준편차 0이 100점)
+    // 안정성 점수 (참고용으로만 유지)
     final stabilityScore = (1 - (rankStability / 50).clamp(0, 1)) * 100;
 
-    // 복합 점수: 등장횟수 40% + 순위 40% + 안정성 20%
-    final sourcingScore =
-        (appearanceScore * 0.4) + (rankScore * 0.4) + (stabilityScore * 0.2);
+    // 복합 점수: 등장횟수 50% + 순위 50%
+    final sourcingScore = (appearanceScore * 0.5) + (rankScore * 0.5);
 
     return ProductAnalytics(
       productId: productId,
@@ -262,7 +281,11 @@ class _ProductData {
       latestPrice: latestRecord.price,
       lowestPrice: lowestPrice,
       highestPrice: highestPrice,
-      sourcingScore: sourcingScore.clamp(0, 100),
+      sourcingScore: sourcingScore.clamp(0, 100).toDouble(),
+      appearanceScore: appearanceScore.clamp(0, 100).toDouble(),
+      rankScore: rankScore.clamp(0, 100).toDouble(),
+      stabilityScore: stabilityScore.clamp(0, 100).toDouble(),
+      totalDays: totalDays,
     );
   }
 

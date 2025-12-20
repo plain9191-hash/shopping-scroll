@@ -47,6 +47,7 @@ class DatabaseService {
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dt TEXT NOT NULL,
         product_id TEXT NOT NULL,
         title TEXT NOT NULL,
         image_url TEXT,
@@ -95,37 +96,42 @@ class DatabaseService {
 
     print('💾 [DB] 저장 시작: $categoryKey / $dateString (${products.length}개)');
 
-    // 배치 처리로 성능 향상
-    final batch = db.batch();
-
     // 기존 데이터 삭제 (같은 날짜/카테고리)
-    batch.delete(
+    await db.delete(
       'products',
       where: 'category_key = ? AND recorded_date = ?',
       whereArgs: [categoryKey, dateString],
     );
 
+    // 배치 처리로 성능 향상
+    final batch = db.batch();
+
     // 새 데이터 삽입
     for (int i = 0; i < products.length; i++) {
       final product = products[i];
-      batch.insert('products', {
-        'product_id': product.id,
-        'title': product.title,
-        'image_url': product.imageUrl,
-        'current_price': product.currentPrice,
-        'original_price': product.originalPrice,
-        'average_price': product.averagePrice,
-        'price_change_percent': product.priceChangePercent,
-        'source': product.source,
-        'category_key': categoryKey,
-        'is_rocket_delivery': product.isRocketDelivery ? 1 : 0,
-        'is_lowest_price': product.isLowestPrice ? 1 : 0,
-        'product_url': product.productUrl,
-        'review_count': product.reviewCount,
-        'average_rating': product.averageRating,
-        'ranking': product.ranking ?? (i + 1),
-        'recorded_date': dateString,
-      });
+      batch.insert(
+        'products',
+        {
+          'dt': dateString,
+          'product_id': product.id,
+          'title': product.title,
+          'image_url': product.imageUrl,
+          'current_price': product.currentPrice,
+          'original_price': product.originalPrice,
+          'average_price': product.averagePrice,
+          'price_change_percent': product.priceChangePercent,
+          'source': product.source,
+          'category_key': categoryKey,
+          'is_rocket_delivery': product.isRocketDelivery ? 1 : 0,
+          'is_lowest_price': product.isLowestPrice ? 1 : 0,
+          'product_url': product.productUrl,
+          'review_count': product.reviewCount,
+          'average_rating': product.averageRating,
+          'ranking': product.ranking ?? (i + 1),
+          'recorded_date': dateString,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
 
     await batch.commit(noResult: true);

@@ -52,15 +52,117 @@ class ProductService {
       final jsonList = productsWithRanking.map((p) => p.toJson()).toList();
       await file.writeAsString(json.encode(jsonList));
       print('✅ [파일 저장] 저장 완료! 파일명: $filePath');
-
-      // DB에도 저장
-      await _dbService.saveProducts(
-        categoryKey: categoryKey,
-        date: date,
-        products: productsWithRanking,
-      );
     } catch (e) {
       print('❌ [파일 저장] 파일 저장 실패: $e');
+    }
+  }
+
+  /// 오늘 날짜의 JSON 파일만 DB로 동기화 (기존 데이터 유지)
+  Future<void> syncAllJsonToDatabase() async {
+    final today = DateTime.now();
+    final todayString = "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+
+    print('🔄 [DB 동기화] 오늘($todayString) 데이터만 DB로 동기화 시작...');
+    try {
+      await _ensureDataDirectoryExists();
+      final directory = Directory(dataDirectoryPath);
+      final files = directory.listSync().whereType<File>().where((f) {
+        final fileName = f.path.split('/').last;
+        return fileName.endsWith('.json') && fileName.startsWith(todayString);
+      });
+
+      int totalSynced = 0;
+      for (final file in files) {
+        final fileName = file.path.split('/').last;
+        final parts = fileName.replaceAll('.json', '').split('_');
+        if (parts.length < 2) continue;
+
+        final dateString = parts[0];
+        final categoryKey = parts.sublist(1).join('_');
+
+        // 날짜 파싱
+        final dateParts = dateString.split('-');
+        if (dateParts.length != 3) continue;
+        final date = DateTime(
+          int.parse(dateParts[0]),
+          int.parse(dateParts[1]),
+          int.parse(dateParts[2]),
+        );
+
+        // JSON 파일 읽기
+        final contents = await file.readAsString();
+        if (contents.isEmpty) continue;
+
+        final jsonList = json.decode(contents) as List;
+        final products = jsonList
+            .map((j) => Product.fromJson(j as Map<String, dynamic>))
+            .toList();
+
+        // DB에 저장 (해당 날짜/카테고리만 업데이트)
+        await _dbService.saveProducts(
+          categoryKey: categoryKey,
+          date: date,
+          products: products,
+        );
+        totalSynced += products.length;
+        print('  ✅ $fileName: ${products.length}개 동기화');
+      }
+      print('🔄 [DB 동기화] 완료! 총 $totalSynced개 상품 동기화됨');
+    } catch (e) {
+      print('❌ [DB 동기화] 실패: $e');
+    }
+  }
+
+  /// 모든 JSON 파일을 DB로 동기화 (최초 마이그레이션용)
+  Future<void> syncAllJsonToDatabaseFull() async {
+    print('🔄 [DB 전체 동기화] 모든 JSON 파일을 DB로 동기화 시작...');
+    try {
+      await _ensureDataDirectoryExists();
+      final directory = Directory(dataDirectoryPath);
+      final files = directory.listSync().whereType<File>().where((f) => f.path.endsWith('.json')).toList();
+
+      // 날짜순 정렬 (오래된 것부터)
+      files.sort((a, b) => a.path.compareTo(b.path));
+
+      int totalSynced = 0;
+      for (final file in files) {
+        final fileName = file.path.split('/').last;
+        final parts = fileName.replaceAll('.json', '').split('_');
+        if (parts.length < 2) continue;
+
+        final dateString = parts[0];
+        final categoryKey = parts.sublist(1).join('_');
+
+        // 날짜 파싱
+        final dateParts = dateString.split('-');
+        if (dateParts.length != 3) continue;
+        final date = DateTime(
+          int.parse(dateParts[0]),
+          int.parse(dateParts[1]),
+          int.parse(dateParts[2]),
+        );
+
+        // JSON 파일 읽기
+        final contents = await file.readAsString();
+        if (contents.isEmpty) continue;
+
+        final jsonList = json.decode(contents) as List;
+        final products = jsonList
+            .map((j) => Product.fromJson(j as Map<String, dynamic>))
+            .toList();
+
+        // DB에 저장
+        await _dbService.saveProducts(
+          categoryKey: categoryKey,
+          date: date,
+          products: products,
+        );
+        totalSynced += products.length;
+        print('  ✅ $fileName: ${products.length}개 동기화');
+      }
+      print('🔄 [DB 전체 동기화] 완료! 총 $totalSynced개 상품 동기화됨');
+    } catch (e) {
+      print('❌ [DB 전체 동기화] 실패: $e');
     }
   }
 

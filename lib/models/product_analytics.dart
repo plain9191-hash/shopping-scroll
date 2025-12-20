@@ -41,6 +41,10 @@ class ProductAnalytics {
   final int lowestPrice;
   final int highestPrice;
   final double sourcingScore; // 소싱 추천 점수 (0-100)
+  final double appearanceScore; // 등장 점수 (40%)
+  final double rankScore; // 순위 점수 (40%)
+  final double stabilityScore; // 안정성 점수 (20%)
+  final int totalDays; // 분석 기간 일수
 
   ProductAnalytics({
     required this.productId,
@@ -55,6 +59,10 @@ class ProductAnalytics {
     required this.lowestPrice,
     required this.highestPrice,
     required this.sourcingScore,
+    required this.appearanceScore,
+    required this.rankScore,
+    required this.stabilityScore,
+    required this.totalDays,
   });
 
   /// 가격 변동률 (최저가 대비 최고가)
@@ -84,6 +92,10 @@ class ProductAnalytics {
         'lowestPrice': lowestPrice,
         'highestPrice': highestPrice,
         'sourcingScore': sourcingScore,
+        'appearanceScore': appearanceScore,
+        'rankScore': rankScore,
+        'stabilityScore': stabilityScore,
+        'totalDays': totalDays,
       };
 
   factory ProductAnalytics.fromJson(Map<String, dynamic> json) =>
@@ -102,5 +114,9 @@ class ProductAnalytics {
         lowestPrice: json['lowestPrice'] as int,
         highestPrice: json['highestPrice'] as int,
         sourcingScore: (json['sourcingScore'] as num).toDouble(),
+        appearanceScore: (json['appearanceScore'] as num?)?.toDouble() ?? 0,
+        rankScore: (json['rankScore'] as num?)?.toDouble() ?? 0,
+        stabilityScore: (json['stabilityScore'] as num?)?.toDouble() ?? 0,
+        totalDays: (json['totalDays'] as int?) ?? 0,
       );
 }
