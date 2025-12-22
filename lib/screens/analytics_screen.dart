@@ -356,6 +356,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => setState(() => _selectedProduct = item),
         borderRadius: BorderRadius.circular(12),
@@ -418,13 +419,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         _buildInfoBadge(
                           '${item.appearanceCount}회 등장',
                           Colors.blue,
                         ),
-                        const SizedBox(width: 6),
                         _buildInfoBadge(
                           '평균 ${item.averageRank.toStringAsFixed(1)}위',
                           Colors.green,
@@ -562,13 +564,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Row(
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
                               children: [
                                 _buildInfoBadge(
                                   '${item.appearanceCount}회 등장',
                                   Colors.blue,
                                 ),
-                                const SizedBox(width: 6),
                                 _buildInfoBadge(
                                   '평균 ${item.averageRank.toStringAsFixed(1)}위',
                                   Colors.green,
@@ -875,61 +878,45 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Color color,
   ) {
     final weightedScore = score * weight;
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 라벨
-        SizedBox(
-          width: 80,
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '$label (×$weight)',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
+            Text(
+              '${score.toStringAsFixed(1)}점 → ${weightedScore.toStringAsFixed(1)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[700],
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 4),
         // 프로그레스 바
-        Expanded(
-          child: Container(
-            height: 20,
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Stack(
-              children: [
-                FractionallySizedBox(
-                  widthFactor: (score / 100).clamp(0, 1),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: color.withAlpha(180),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Text(
-                    '${score.toStringAsFixed(1)}점',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        Container(
+          height: 16,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(4),
           ),
-        ),
-        const SizedBox(width: 8),
-        // 가중치 적용 점수
-        SizedBox(
-          width: 50,
-          child: Text(
-            '×${weight.toString()} = ${weightedScore.toStringAsFixed(1)}',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: (score / 100).clamp(0, 1),
+            child: Container(
+              decoration: BoxDecoration(
+                color: color.withAlpha(180),
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
           ),
         ),

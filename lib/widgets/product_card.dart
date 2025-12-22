@@ -70,19 +70,21 @@ class ProductCard extends StatelessWidget {
             // --- 이미지 영역 ---
             _buildImageSection(context, colorScheme, discountRate),
             // --- 정보 영역 ---
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTitle(),
-                  const SizedBox(height: 8),
-                  _buildPriceSection(colorScheme, customColors, discountRate),
-                  const SizedBox(height: 10),
-                  _buildReviewSection(colorScheme),
-                  const SizedBox(height: 12),
-                  _buildFooter(colorScheme),
-                ],
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTitle(),
+                    const SizedBox(height: 6),
+                    _buildPriceSection(colorScheme, customColors, discountRate),
+                    const SizedBox(height: 6),
+                    _buildReviewSection(colorScheme),
+                    const Spacer(),
+                    _buildFooter(colorScheme),
+                  ],
+                ),
               ),
             ),
           ],
@@ -166,7 +168,7 @@ class ProductCard extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(
         fontSize: 16,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w400,
         height: 1.4,
       ),
     );
@@ -177,39 +179,36 @@ class ProductCard extends StatelessWidget {
     CustomColors customColors,
     double? discountRate,
   ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 4,
       children: [
         if (discountRate != null && discountRate > 0)
           Text(
             '${discountRate.toStringAsFixed(0)}%',
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: customColors.priceDown,
             ),
           ),
-        if (discountRate != null && discountRate > 0) const SizedBox(width: 8),
         Text(
           _formatPrice(product.currentPrice),
           style: const TextStyle(
-            fontSize: 22,
+            fontSize: 17,
             fontWeight: FontWeight.bold,
           ),
         ),
         if (product.originalPrice != null &&
             discountRate != null &&
             discountRate > 0)
-          Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Text(
-              _formatPrice(product.originalPrice!),
-              style: TextStyle(
-                fontSize: 14,
-                color: colorScheme.onSurfaceVariant,
-                decoration: TextDecoration.lineThrough,
-              ),
+          Text(
+            _formatPrice(product.originalPrice!),
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+              decoration: TextDecoration.lineThrough,
             ),
           ),
       ],

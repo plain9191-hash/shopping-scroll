@@ -45,7 +45,7 @@ class DatabaseService {
 
     // 상품 테이블
     await db.execute('''
-      CREATE TABLE products (
+      CREATE TABLE IF NOT EXISTS products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         dt TEXT NOT NULL,
         product_id TEXT NOT NULL,
@@ -70,16 +70,16 @@ class DatabaseService {
 
     // 인덱스 생성 (쿼리 성능 향상)
     await db.execute(
-      'CREATE INDEX idx_products_date ON products(recorded_date)',
+      'CREATE INDEX IF NOT EXISTS idx_products_date ON products(recorded_date)',
     );
     await db.execute(
-      'CREATE INDEX idx_products_category ON products(category_key)',
+      'CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_key)',
     );
     await db.execute(
-      'CREATE INDEX idx_products_product_id ON products(product_id)',
+      'CREATE INDEX IF NOT EXISTS idx_products_product_id ON products(product_id)',
     );
     await db.execute(
-      'CREATE UNIQUE INDEX idx_products_unique ON products(product_id, category_key, recorded_date)',
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_unique ON products(product_id, category_key, recorded_date)',
     );
 
     print('✅ [DB] 테이블 생성 완료!');

@@ -42,7 +42,6 @@ class _HomeScreenState extends State<HomeScreen>
   String _selectedCoupangCategoryKey = 'all';
 
   List<Product> _coupangProducts = [];
-  List<Product> _naverProducts = [];
   bool _isLoading = false;
 
   DateTime _selectedDate =
@@ -173,32 +172,23 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadProducts() async {
     if (_isLoading) return;
+    if (_tabController.index != 0) return; // 네이버 탭은 로딩 안함
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      List<Product> products;
-      if (_tabController.index == 0) {
-        final categoryData = _coupangCategories.values.firstWhere(
-          (data) => data['key'] == _selectedCoupangCategoryKey,
-          orElse: () => {'id': '', 'key': 'all'},
-        );
-        products = await _productService.getCoupangProducts(
-          categoryId: categoryData['id'] ?? '',
-          categoryKey: _selectedCoupangCategoryKey,
-          date: _selectedDate,
-        );
-      } else {
-        // TODO: Implement similar caching for Naver
-        products = await _productService.getNaverShoppingProducts(limit: 100);
-      }
+      final categoryData = _coupangCategories.values.firstWhere(
+        (data) => data['key'] == _selectedCoupangCategoryKey,
+        orElse: () => {'id': '', 'key': 'all'},
+      );
+      final products = await _productService.getCoupangProducts(
+        categoryId: categoryData['id'] ?? '',
+        categoryKey: _selectedCoupangCategoryKey,
+        date: _selectedDate,
+      );
 
       if (mounted) {
         setState(() {
-          if (_tabController.index == 0) {
-            _coupangProducts = products;
-          } else {
-            _naverProducts = products;
-          }
+          _coupangProducts = products;
         });
         if (products.isEmpty && !_selectedDateIsToday()) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -273,51 +263,6 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  Future<void> _fetchAllAndSave() async {
-    if (_isLoading) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('오늘의 모든 카테고리 랭킹을 저장합니다...')),
-    );
-    if (mounted) setState(() => _isLoading = true);
-
-    try {
-      final today =
-          DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
-      // === Fetch Coupang ===
-      for (final entry in _coupangCategories.entries) {
-        // Service will now handle fetching and saving
-        await _productService.getCoupangProducts(
-          categoryId: entry.value['id'] ?? '',
-          categoryKey: entry.value['key'] ?? 'all',
-          date: today,
-          limit: 100,
-        );
-      }
-
-      // 모든 JSON 파일을 DB로 동기화
-      await _productService.syncAllJsonToDatabase();
-
-      // Refresh available dates and current product list
-      await _loadAvailableDates();
-      await _loadProducts();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('데이터 저장 중 오류 발생: $e')),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('오늘의 랭킹 저장 완료!')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -327,11 +272,22 @@ class _HomeScreenState extends State<HomeScreen>
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverAppBar(
-              title: const Text('가격 변동 추적',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 28,
-                      color: Colors.black87)),
+              toolbarHeight: 60,
+              title: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.pets, color: Color(0xFF434E78), size: 22),
+                    SizedBox(width: 6),
+                    Text('하우머치',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 20,
+                            color: Colors.black87)),
+                  ],
+                ),
+              ),
               centerTitle: true,
               backgroundColor: Colors.white,
               floating: true,
@@ -353,12 +309,6 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 if (!kIsWeb)
                   IconButton(
-                    icon: const Icon(Icons.download_for_offline_outlined),
-                    tooltip: '오늘의 모든 랭킹 저장',
-                    onPressed: _isLoading ? null : _fetchAllAndSave,
-                  ),
-                if (!kIsWeb)
-                  IconButton(
                     icon: const Icon(Icons.sync),
                     tooltip: 'JSON → DB 동기화',
                     onPressed: _isLoading ? null : _syncToDatabase,
@@ -374,9 +324,9 @@ class _HomeScreenState extends State<HomeScreen>
                 unselectedLabelColor: Colors.black87,
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 unselectedLabelStyle:
-                    const TextStyle(fontWeight: FontWeight.normal),
+                    const TextStyle(fontWeight: FontWeight.normal, fontSize: 16),
                 tabs: const [Tab(text: '쿠팡'), Tab(text: '네이버')],
               ),
             ),
@@ -387,8 +337,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             _buildProductList(
                 products: _coupangProducts, onRefresh: _loadProducts),
-            _buildProductList(
-                products: _naverProducts, onRefresh: _loadProducts),
+            _buildComingSoon(),
           ],
         ),
       ),
@@ -475,20 +424,41 @@ class _HomeScreenState extends State<HomeScreen>
 
   SliverToBoxAdapter _buildHeader(String title) {
     final dateString = DateFormat('yy.MM.dd').format(_selectedDate);
+    final isCoupang = title.contains('쿠팡');
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87)),
+            Row(
+              children: [
+                if (isCoupang)
+                  const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 24),
+                if (isCoupang) const SizedBox(width: 6),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87)),
+              ],
+            ),
             const SizedBox(height: 8),
-            Text('가격 변동 Top 100 ($dateString 기준)',
-                style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+            Row(
+              children: [
+                Text('$dateString 기준',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _isLoading ? null : _loadProducts,
+                  child: Icon(
+                    Icons.refresh,
+                    size: 18,
+                    color: _isLoading ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -517,6 +487,26 @@ class _HomeScreenState extends State<HomeScreen>
           },
           childCount: products.length,
         ),
+      ),
+    );
+  }
+
+  Widget _buildComingSoon() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.construction, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            '오픈 준비 중입니다',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
       ),
     );
   }
