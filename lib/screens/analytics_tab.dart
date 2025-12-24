@@ -6,35 +6,16 @@ import '../models/product_analytics.dart';
 import '../services/analytics_service.dart';
 import '../widgets/rank_chart.dart';
 
-/// 아이템 분석 화면
-class AnalyticsScreen extends StatefulWidget {
-  const AnalyticsScreen({super.key});
+/// 아이템 분석 탭 (HomeScreen 내 탭으로 사용)
+class AnalyticsTab extends StatefulWidget {
+  const AnalyticsTab({super.key});
 
   @override
-  State<AnalyticsScreen> createState() => _AnalyticsScreenState();
+  State<AnalyticsTab> createState() => _AnalyticsTabState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
+class _AnalyticsTabState extends State<AnalyticsTab> {
   final AnalyticsService _analyticsService = AnalyticsService();
-
-  final Map<String, String> _categories = {
-    '전체': '',
-    '패션의류/잡화': '564553',
-    '뷰티': '176422',
-    '출산/유아동': '221834',
-    '식품': '194176',
-    '주방용품': '185569',
-    '생활용품': '115573',
-    '홈인테리어': '184455',
-    '가전디지털': '178155',
-    '스포츠/레저': '317678',
-    '자동차용품': '183960',
-    '도서': '317677',
-    '완구/취미': '317679',
-    '문구/오피스': '317679',
-    '반려/애완': '115574',
-    '헬스/건강식품': '305698',
-  };
 
   String _selectedCategoryId = '';
   int _selectedDays = 7;
@@ -52,7 +33,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Future<void> _loadAvailableCategories() async {
     final categories = await _analyticsService.getAvailableCategories();
     setState(() {
-      // 'all' 카테고리를 맨 앞에 오도록 정렬
       final sortedCategories = categories.toList();
       sortedCategories.sort((a, b) {
         if (a == 'all') return -1;
@@ -61,7 +41,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       });
       _availableCategories = sortedCategories.toSet();
 
-      // 'all'이 있으면 선택, 없으면 첫 번째 카테고리 선택
       if (categories.contains('all')) {
         _selectedCategoryId = 'all';
       } else if (categories.isNotEmpty && _selectedCategoryId.isEmpty) {
@@ -98,19 +77,31 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   String _getCategoryName(String categoryId) {
-    for (final entry in _categories.entries) {
-      if (entry.value == categoryId) {
-        return entry.key;
-      }
-    }
-    return categoryId.isEmpty ? '전체' : categoryId;
+    // 카테고리 키(영어)를 대문자로 표시
+    if (categoryId == 'all') return 'ALL';
+    if (categoryId == 'fashion') return 'FASHION';
+    if (categoryId == 'beauty') return 'BEAUTY';
+    if (categoryId == 'baby') return 'BABY';
+    if (categoryId == 'food') return 'FOOD';
+    if (categoryId == 'kitchen') return 'KITCHEN';
+    if (categoryId == 'living') return 'LIVING';
+    if (categoryId == 'interior') return 'INTERIOR';
+    if (categoryId == 'digital') return 'DIGITAL';
+    if (categoryId == 'sports') return 'SPORTS';
+    if (categoryId == 'car') return 'CAR';
+    if (categoryId == 'books') return 'BOOKS';
+    if (categoryId == 'toys') return 'TOYS';
+    if (categoryId == 'office') return 'OFFICE';
+    if (categoryId == 'pet') return 'PET';
+    if (categoryId == 'health') return 'HEALTH';
+    return categoryId.toUpperCase();
   }
 
   void _showScoringInfoDialog() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('소싱 점수 계산법'),
+        title: const Text('아이템 점수 계산법'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,33 +191,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text(
-          '아이템 분석',
-          style: TextStyle(fontWeight: FontWeight.bold),
+    return Column(
+      children: [
+        _buildFilters(),
+        Expanded(
+          child: _selectedProduct != null
+              ? _buildProductDetail()
+              : _buildAnalyticsList(),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            tooltip: '점수 계산법',
-            onPressed: _showScoringInfoDialog,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildFilters(),
-          Expanded(
-            child: _selectedProduct != null
-                ? _buildProductDetail()
-                : _buildAnalyticsList(),
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -237,14 +210,32 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 카테고리 선택
-          const Text(
-            '카테고리',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '카테고리',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.grey,
+                  fontFamily: 'Pretendard',
+                ),
+              ),
+              GestureDetector(
+                onTap: _showScoringInfoDialog,
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      '점수 계산법',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600], fontFamily: 'Pretendard'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -267,7 +258,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     selectedColor: const Color(0xFF434E78),
                     labelStyle: TextStyle(
                       color: isSelected ? Colors.white : Colors.black87,
-                      fontSize: 12,
+                      fontSize: 14,
+                      fontFamily: 'Pretendard',
                     ),
                   ),
                 );
@@ -275,13 +267,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 기간 선택
           const Text(
             '분석 기간',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
               color: Colors.grey,
+              fontFamily: 'Pretendard',
             ),
           ),
           const SizedBox(height: 8),
@@ -302,7 +294,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   selectedColor: const Color(0xFF434E78),
                   labelStyle: TextStyle(
                     color: isSelected ? Colors.white : Colors.black87,
-                    fontSize: 12,
+                    fontSize: 14,
+                    fontFamily: 'Pretendard',
                   ),
                 ),
               );
@@ -327,12 +320,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             const SizedBox(height: 16),
             Text(
               '분석할 데이터가 없습니다',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+              style: TextStyle(color: Colors.grey[600], fontSize: 18, fontFamily: 'Pretendard'),
             ),
             const SizedBox(height: 8),
             Text(
-              '먼저 홈 화면에서 데이터를 저장해주세요',
-              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+              '먼저 Top 100 탭에서 데이터를 확인해주세요',
+              style: TextStyle(color: Colors.grey[400], fontSize: 16, fontFamily: 'Pretendard'),
             ),
           ],
         ),
@@ -364,7 +357,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              // 순위 뱃지
               Container(
                 width: 32,
                 height: 32,
@@ -385,7 +377,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              // 상품 이미지
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: CachedNetworkImage(
@@ -404,7 +395,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              // 상품 정보
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,8 +404,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 15,
                         fontWeight: FontWeight.w500,
+                        fontFamily: 'Pretendard',
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -437,15 +428,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     Text(
                       '${numberFormat.format(item.latestPrice)}원',
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF434E78),
+                        fontFamily: 'Pretendard',
                       ),
                     ),
                   ],
                 ),
               ),
-              // 소싱 점수
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -465,8 +456,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     Text(
                       '점',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: _getScoreColor(item.sourcingScore),
+                        fontFamily: 'Pretendard',
                       ),
                     ),
                   ],
@@ -489,9 +481,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           color: color,
           fontWeight: FontWeight.w500,
+          fontFamily: 'Pretendard',
         ),
       ),
     );
@@ -512,17 +505,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 뒤로가기 버튼
           TextButton.icon(
             onPressed: () => setState(() => _selectedProduct = null),
             icon: const Icon(Icons.arrow_back, size: 18),
             label: const Text('목록으로'),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-            ),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero),
           ),
           const SizedBox(height: 16),
-          // 상품 정보 카드
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -552,6 +541,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
+                                fontFamily: 'Pretendard',
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -561,6 +551,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF434E78),
+                                fontFamily: 'Pretendard',
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -584,9 +575,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 onPressed: () => _launchUrl(item.productUrl!),
                                 icon: const Icon(Icons.open_in_new, size: 16),
                                 label: const Text('상품 페이지'),
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                ),
+                                style: TextButton.styleFrom(padding: EdgeInsets.zero),
                               ),
                             ],
                           ],
@@ -599,7 +588,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 소싱 점수 카드
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -608,14 +596,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    '소싱 점수',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    '아이템 점수',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
                   ),
                   const SizedBox(height: 16),
-                  // 종합 점수
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -645,14 +629,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // 점수 상세 분석
                   const Text(
                     '점수 상세 분석',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, fontFamily: 'Pretendard'),
                   ),
                   const SizedBox(height: 12),
                   _buildScoreBreakdownRow(
@@ -671,7 +650,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     Colors.green,
                   ),
                   const SizedBox(height: 16),
-                  // 계산식 설명
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -719,7 +697,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // 참고 지표
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -732,11 +709,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.analytics_outlined,
-                              size: 18,
-                              color: Colors.orange[700],
-                            ),
+                            Icon(Icons.analytics_outlined, size: 18, color: Colors.orange[700]),
                             const SizedBox(width: 6),
                             Text(
                               '참고 지표 (종합 점수 미반영)',
@@ -758,7 +731,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 가격 정보 카드
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -768,10 +740,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   const Text(
                     '가격 정보',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -779,10 +748,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     children: [
                       _buildPriceItem('최저가', numberFormat.format(item.lowestPrice)),
                       _buildPriceItem('최고가', numberFormat.format(item.highestPrice)),
-                      _buildPriceItem(
-                        '변동률',
-                        '${item.priceVariation.toStringAsFixed(1)}%',
-                      ),
+                      _buildPriceItem('변동률', '${item.priceVariation.toStringAsFixed(1)}%'),
                     ],
                   ),
                 ],
@@ -790,7 +756,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 순위 추이 차트
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -800,18 +765,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   const Text(
                     '순위 추이',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '낮을수록 좋음 (1위가 최상위)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600], fontFamily: 'Pretendard'),
                   ),
                   RankChart(rankHistory: item.rankHistory, height: 200),
                 ],
@@ -819,7 +778,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 가격 추이 차트
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -829,10 +787,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   const Text(
                     '가격 추이',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
                   ),
                   PriceChart(rankHistory: item.rankHistory, height: 150),
                 ],
@@ -840,7 +795,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          // 날짜별 기록
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
@@ -850,10 +804,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   const Text(
                     '날짜별 기록',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
                   ),
                   const SizedBox(height: 12),
                   ...item.rankHistory.reversed.map((h) => Padding(
@@ -862,16 +813,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           children: [
                             Text(
                               DateFormat('MM/dd').format(h.date),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: const TextStyle(fontWeight: FontWeight.w500, fontFamily: 'Pretendard'),
                             ),
                             const SizedBox(width: 16),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: h.rank <= 10
                                     ? Colors.green.withAlpha(25)
@@ -883,15 +829,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 style: TextStyle(
                                   color: h.rank <= 10 ? Colors.green : Colors.black87,
                                   fontWeight: FontWeight.w500,
+                                  fontFamily: 'Pretendard',
                                 ),
                               ),
                             ),
                             const Spacer(),
                             Text(
                               '${numberFormat.format(h.price)}원',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: const TextStyle(fontWeight: FontWeight.w500, fontFamily: 'Pretendard'),
                             ),
                           ],
                         ),
@@ -921,23 +866,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           children: [
             Text(
               '$label (×$weight)',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, fontFamily: 'Pretendard'),
             ),
             Text(
               '${score.toStringAsFixed(1)}점 → ${weightedScore.toStringAsFixed(1)}',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 color: Colors.grey[700],
                 fontWeight: FontWeight.w600,
+                fontFamily: 'Pretendard',
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        // 프로그레스 바
         Container(
           height: 16,
           decoration: BoxDecoration(
@@ -964,18 +906,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       children: [
         Text(
           value,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, fontFamily: 'Pretendard'),
         ),
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 14, color: Colors.grey[600], fontFamily: 'Pretendard'),
         ),
       ],
     );
@@ -1007,25 +943,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
+            const Text(
               '안정성 점수',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, fontFamily: 'Pretendard'),
             ),
             Text(
               '${score.toStringAsFixed(1)}점 · $label',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 color: Colors.grey[700],
                 fontWeight: FontWeight.w600,
+                fontFamily: 'Pretendard',
               ),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        // 프로그레스 바
         Container(
           height: 16,
           decoration: BoxDecoration(
@@ -1046,10 +979,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         const SizedBox(height: 6),
         Text(
           detail,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 13, color: Colors.grey[600], fontFamily: 'Pretendard'),
         ),
       ],
     );

@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+// 앱은 읽기 전용 - 데이터 수집은 bin/fetch_data.dart 스크립트에서 수행
 import 'package:intl/intl.dart';
 import '../models/product.dart';
 import '../services/product_service.dart';
 import '../widgets/category_selector.dart';
 import '../widgets/product_card.dart';
-import 'analytics_screen.dart';
+import 'analytics_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -56,8 +57,7 @@ class _HomeScreenState extends State<HomeScreen>
 
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        setState(() {}); // Rebuild UI to show/hide category selector
-        _loadProducts(); // Load products for the newly selected tab
+        setState(() {}); // Rebuild UI
       }
     });
   }
@@ -73,59 +73,14 @@ class _HomeScreenState extends State<HomeScreen>
     await _loadAvailableDates();
     if (mounted) {
       setState(() {
-        if (!_availableDates.any((d) => d.isAtSameMomentAs(_selectedDate))) {
-          _availableDates.add(_selectedDate);
-          _availableDates.sort((a, b) => b.compareTo(a));
+        // 가장 최신 날짜를 선택 (데이터가 있는 경우)
+        if (_availableDates.isNotEmpty) {
+          _selectedDate = _availableDates.first;
         }
       });
     }
 
-    // 앱 실행 시 오늘 날짜의 모든 카테고리 데이터 자동 저장
-    if (!kIsWeb) {
-      await _fetchAllCategoriesOnStartup();
-    }
-
     await _loadProducts();
-  }
-
-  Future<void> _fetchAllCategoriesOnStartup() async {
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-    final dataDir = Directory(ProductService.dataDirectoryPath);
-
-    // 오늘 날짜 파일이 이미 있는지 확인
-    final todayPrefix = "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
-    bool hasTodayData = false;
-
-    if (await dataDir.exists()) {
-      final files = dataDir.listSync();
-      hasTodayData = files.any((f) => f.path.split('/').last.startsWith(todayPrefix));
-    }
-
-    // 오늘 데이터가 없으면 모든 카테고리 가져오기
-    if (!hasTodayData) {
-      print('📥 [초기화] 오늘 데이터가 없습니다. 모든 카테고리 데이터를 가져옵니다...');
-      if (mounted) setState(() => _isLoading = true);
-
-      for (final entry in _coupangCategories.entries) {
-        print('📥 [초기화] "${entry.key}" 카테고리 가져오는 중...');
-        await _productService.getCoupangProducts(
-          categoryId: entry.value['id'] ?? '',
-          categoryKey: entry.value['key'] ?? 'all',
-          date: today,
-          limit: 100,
-        );
-      }
-
-      print('✅ [초기화] 모든 카테고리 데이터 저장 완료!');
-
-      // 모든 JSON 파일을 DB로 동기화
-      await _productService.syncAllJsonToDatabase();
-
-      await _loadAvailableDates();
-      if (mounted) setState(() => _isLoading = false);
-    } else {
-      print('✅ [초기화] 오늘 데이터가 이미 있습니다.');
-    }
   }
 
   Future<void> _loadAvailableDates() async {
@@ -172,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   Future<void> _loadProducts() async {
     if (_isLoading) return;
-    if (_tabController.index != 0) return; // 네이버 탭은 로딩 안함
+    if (_tabController.index != 0) return; // 아이템 분석 탭은 별도 로딩
     if (mounted) setState(() => _isLoading = true);
 
     try {
@@ -296,19 +251,6 @@ class _HomeScreenState extends State<HomeScreen>
               actions: [
                 if (!kIsWeb)
                   IconButton(
-                    icon: const Icon(Icons.analytics_outlined),
-                    tooltip: '소싱 분석',
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AnalyticsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                if (!kIsWeb)
-                  IconButton(
                     icon: const Icon(Icons.sync),
                     tooltip: 'JSON → DB 동기화',
                     onPressed: _isLoading ? null : _syncToDatabase,
@@ -327,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen>
                 labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 unselectedLabelStyle:
                     const TextStyle(fontWeight: FontWeight.normal, fontSize: 16),
-                tabs: const [Tab(text: '쿠팡'), Tab(text: '네이버')],
+                tabs: const [Tab(text: 'Top 100'), Tab(text: '아이템 분석')],
               ),
             ),
           ];
@@ -337,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             _buildProductList(
                 products: _coupangProducts, onRefresh: _loadProducts),
-            _buildComingSoon(),
+            const AnalyticsTab(),
           ],
         ),
       ),
@@ -388,25 +330,22 @@ class _HomeScreenState extends State<HomeScreen>
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildDatePicker()),
-          if (_tabController.index == 0)
-            SliverToBoxAdapter(
-              child: CategorySelector(
-                categories: _coupangCategories,
-                selectedCategoryKey: _selectedCoupangCategoryKey,
-                onCategorySelected: (categoryKey) {
-                  setState(() => _selectedCoupangCategoryKey = categoryKey);
-                  _loadProducts();
-                },
-              ),
+          SliverToBoxAdapter(
+            child: CategorySelector(
+              categories: _coupangCategories,
+              selectedCategoryKey: _selectedCoupangCategoryKey,
+              onCategorySelected: (categoryKey) {
+                setState(() => _selectedCoupangCategoryKey = categoryKey);
+                _loadProducts();
+              },
             ),
+          ),
           if (_isLoading && products.isEmpty)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
             )
           else ...[
-            _buildHeader(
-              _tabController.index == 0 ? '쿠팡 BEST 100' : '네이버 인기 BEST',
-            ),
+            _buildHeader('쿠팡 BEST 100'),
             if (products.isEmpty && !_isLoading)
               const SliverFillRemaining(
                 child: Center(
@@ -424,7 +363,6 @@ class _HomeScreenState extends State<HomeScreen>
 
   SliverToBoxAdapter _buildHeader(String title) {
     final dateString = DateFormat('yy.MM.dd').format(_selectedDate);
-    final isCoupang = title.contains('쿠팡');
     return SliverToBoxAdapter(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -433,9 +371,8 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Row(
               children: [
-                if (isCoupang)
-                  const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 24),
-                if (isCoupang) const SizedBox(width: 6),
+                const Icon(Icons.emoji_events, color: Color(0xFFFFD700), size: 24),
+                const SizedBox(width: 6),
                 Text(title,
                     style: const TextStyle(
                         fontSize: 22,
@@ -491,23 +428,4 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildComingSoon() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.construction, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            '오픈 준비 중입니다',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey[600],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
