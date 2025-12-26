@@ -28,6 +28,12 @@ class _CategorySelectorState extends State<CategorySelector> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(CategorySelector oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.categories.length != oldWidget.categories.length) {
@@ -48,20 +54,25 @@ class _CategorySelectorState extends State<CategorySelector> {
   }
 
   void _scrollToSelected() {
+    if (!mounted) return;
+
     final selectedIndex = widget.categories.values.toList().indexWhere(
       (data) => data['key'] == widget.selectedCategoryKey,
     );
-    if (selectedIndex != -1) {
+    if (selectedIndex != -1 && selectedIndex < _tabKeys.length) {
       final key = _tabKeys[selectedIndex];
-      final context = key.currentContext;
-      if (context != null) {
+      final keyContext = key.currentContext;
+      if (keyContext != null && mounted) {
         // Ensure the tab is visible and centered after the frame is rendered
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          Scrollable.ensureVisible(
-            context,
-            duration: const Duration(milliseconds: 300),
-            alignment: 0.5, // Center align
-          );
+          if (!mounted) return;
+          if (key.currentContext != null) {
+            Scrollable.ensureVisible(
+              key.currentContext!,
+              duration: const Duration(milliseconds: 300),
+              alignment: 0.5, // Center align
+            );
+          }
         });
       }
     }

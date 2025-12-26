@@ -191,15 +191,50 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
 
   @override
   Widget build(BuildContext context) {
+    // 상세 화면일 때는 필터 숨기고 목록으로 헤더 표시
+    if (_selectedProduct != null) {
+      return Column(
+        children: [
+          _buildDetailHeader(),
+          Expanded(child: _buildProductDetail()),
+        ],
+      );
+    }
+
     return Column(
       children: [
         _buildFilters(),
-        Expanded(
-          child: _selectedProduct != null
-              ? _buildProductDetail()
-              : _buildAnalyticsList(),
-        ),
+        Expanded(child: _buildAnalyticsList()),
       ],
+    );
+  }
+
+  Widget _buildDetailHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: Colors.white,
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => setState(() => _selectedProduct = null),
+            child: Row(
+              children: [
+                const Icon(Icons.arrow_back_ios, size: 18, color: Color(0xFF434E78)),
+                const SizedBox(width: 4),
+                const Text(
+                  '목록으로',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF434E78),
+                    fontFamily: 'Pretendard',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -505,13 +540,6 @@ class _AnalyticsTabState extends State<AnalyticsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextButton.icon(
-            onPressed: () => setState(() => _selectedProduct = null),
-            icon: const Icon(Icons.arrow_back, size: 18),
-            label: const Text('목록으로'),
-            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-          ),
-          const SizedBox(height: 16),
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(

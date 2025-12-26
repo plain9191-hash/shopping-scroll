@@ -169,8 +169,8 @@ Future<void> _syncToDatabase(String dateString) async {
     }
 
     final result = await Process.run(
-      'dart',
-      ['run', syncScriptPath, dateString],
+      '/Users/grace/flutter/bin/dart',
+      ['run', 'scripts/sync_to_db.dart', dateString],
       workingDirectory: '/Users/grace/price_tracker',
     );
 
